@@ -8,8 +8,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 import io
-import numbers
-import decimal
+
 
 class PDFStamperApp:
     def __init__(self, root):
@@ -78,7 +77,7 @@ class PDFStamperApp:
 
     def cleanup_old_files(self):
         import time
-        if(self.config.get("auto_delete"), False):
+        if self.config.get("auto_delete", False):
             current_time = time.time()
             time_limit = self.config.get("auto_delete_time") * 60 * 60 #alle Datein älter x stunden
             
@@ -88,24 +87,26 @@ class PDFStamperApp:
             if(os.path.exists(unstamped_files_path)):
                 for root, dirs, files in os.walk(unstamped_files_path):
                     for file in files:
-                        full_path = os.path.normpath(os.path.join(root, file))
-                        file_time = os.path.getmtime(full_path)
-                        if(current_time - file_time > time_limit):
-                            try:
-                                os.remove(full_path)
-                                print(f"Datei '{file}' erfolgreich geloescht!")
-                            except FileNotFoundError: print(f"Datei '{file}' nicht gefunden.")
+                        if(file.lower().endswith('.pdf')):
+                            full_path = os.path.normpath(os.path.join(root, file))
+                            file_time = os.path.getmtime(full_path)
+                            if(current_time - file_time > time_limit):
+                                try:
+                                    os.remove(full_path)
+                                    print(f"Datei '{file}' erfolgreich geloescht!")
+                                except FileNotFoundError: print(f"Datei '{file}' nicht gefunden.")
             # Alte gestempelte löschen
             if(os.path.exists(stamped_files_path)):
                 for root, dirs, files in os.walk(stamped_files_path):
                     for file in files:
-                        full_path = os.path.normpath(os.path.join(root, file))
-                        file_time = os.path.getmtime(full_path)
-                        if(current_time - file_time > time_limit):
-                            try:
-                                os.remove(full_path)
-                                print(f"Datei '{file}' erfolgreich geloescht!")
-                            except FileNotFoundError: print(f"Datei '{file}' nicht gefunden.")
+                        if(file.lower().endswith('.pdf')):
+                            full_path = os.path.normpath(os.path.join(root, file))
+                            file_time = os.path.getmtime(full_path)
+                            if(current_time - file_time > time_limit):
+                                try:
+                                    os.remove(full_path)
+                                    print(f"Datei '{file}' erfolgreich geloescht!")
+                                except FileNotFoundError: print(f"Datei '{file}' nicht gefunden.")
         
     def cleanup_old_stamped_files(self, config):
         """Entfernt gestempelte Dateien die älter als 24 Stunden sind"""
@@ -653,16 +654,32 @@ class PDFStamperApp:
                     self.stamped_files.append(normalized_path)
                     self.stamped_files_timestamps[normalized_path] = time.time()
                     self.save_config()
+                    
                 
                 if self.config.get("auto_save", False):
                     # Kurze Bestätigung bei Auto-Save
                     self.filename_label.config(text=f"✅ Gespeichert: {os.path.basename(filepath)}")
-                    self.root.after(3000, lambda: self.filename_label.config(text=f"📄 {os.path.basename(self.current_pdf)}"))
+                    #self.root.after(3000, lambda: self.filename_label.config(text=f"📄 {os.path.basename(self.current_pdf)}"))
+                    self.close_pdf()
                 else:
                     messagebox.showinfo("Erfolg", f"PDF wurde gespeichert:\n{filepath}")
+                    self.close_pdf()
             except Exception as e:
                 messagebox.showerror("Fehler", f"PDF konnte nicht gespeichert werden:\n{str(e)}")
     
+    def close_pdf(self):
+        """Schließt die aktuell geöffnete PDF"""
+        if self.pdf_document:
+            self.pdf_document.close()
+            self.pdf_document = None
+            self.current_pdf = None
+            self.current_page = 0
+            self.zoom = 1.0
+            self.pdf_canvas.delete("all")
+            self.page_label.config(text="Keine PDF geladen")
+            self.root.after(3000, lambda: self.filename_label.config(text="Keine Datei geöffnet"))
+        
+
     def set_open_path(self):
         """Öffnungspfad festlegen"""
         path = filedialog.askdirectory(title="Öffnungspfad wählen")
@@ -675,7 +692,7 @@ class PDFStamperApp:
             
     def set_delete_time(self):
         inputbox = tk.Tk()
-        inputbox.title("Zahl eingeben")
+        inputbox.title("Lösche Protokolle älter X Stunden")
         tk.Label(inputbox, text='Zeit in Stunden nach der alte Protokolle gelöscht werden sollen').pack()
         entry = tk.Entry(inputbox)
         entry.pack()
