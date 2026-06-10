@@ -19,10 +19,7 @@ jobs:
     - name: Pyinstaller installieren
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install fitz
-        pip install tkinter
-        pip install json
+        pip install pyinstaller pymupdf pillow
   
     - name: Exe kompilieren
       run: |
