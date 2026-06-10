@@ -16,12 +16,12 @@ class PDFStamperApp:
         self.root.title("PDF Stempel Tool")
         self.root.geometry("1200x800")
         
-        # Pfad zum Verzeichnis der ausfuehrbaren Datei
+        # Pfad zum Verzeichnis der ausführbaren Datei
         if getattr(sys, 'frozen', False):
             # Wenn als .exe kompiliert
             self.app_path = os.path.dirname(sys.executable)
         else:
-            # Wenn als Python-Skript ausgefuehrt
+            # Wenn als Python-Skript ausgeführt
             self.app_path = os.path.dirname(os.path.abspath(__file__))
         
         # Konfigurationsdatei
@@ -36,7 +36,7 @@ class PDFStamperApp:
         self.selected_stamp = None
         self.stamps = []
         self.watch_files = []
-        self.file_paths = {}  # Mapping von Anzeigenamen zu vollstaendigen Pfaden
+        self.file_paths = {}  # Mapping von Anzeigenamen zu vollständigen Pfaden
         # Liste bearbeiteter Dateien laden und normalisieren
         raw_stamped = self.config.get("stamped_files", [])
         self.stamped_files = [os.path.normpath(f.strip()) for f in raw_stamped]
@@ -48,7 +48,7 @@ class PDFStamperApp:
         # GUI erstellen
         self.create_gui()
         
-        # ueberwachung starten
+        # Überwachung starten
         self.watch_folder()
         
     def load_config(self):
@@ -57,8 +57,8 @@ class PDFStamperApp:
             "open_path": str(Path.home() / "Documents"),
             "save_path": str(Path.home() / "Documents"),
             "auto_save": False,  # Automatisch speichern ohne Dialog
-            "auto_delete": False, # Automatisches loeschen alter Protokolle
-            "auto_delete_time": 12 # Protokolle aelter x Stunden loeschen
+            "auto_delete": False, # Automatisches löschen alter Protokolle
+            "auto_delete_time": 12 # Protokolle älter x Stunden löschen
         }
         
         if os.path.exists(self.config_file):
@@ -66,7 +66,7 @@ class PDFStamperApp:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
                     
-                    # Alte gestempelte Dateien bereinigen (aelter als 24 Stunden)
+                    # Alte gestempelte Dateien bereinigen (älter als 24 Stunden)
                     if "stamped_files_timestamps" in config:
                         self.cleanup_old_stamped_files(config)
                     
@@ -79,11 +79,11 @@ class PDFStamperApp:
         import time
         if self.config.get("auto_delete", False):
             current_time = time.time()
-            time_limit = self.config.get("auto_delete_time") * 60 * 60 #alle Datein aelter x stunden
+            time_limit = self.config.get("auto_delete_time") * 60 * 60 #alle Datein älter x stunden
             
             unstamped_files_path = self.config.get("open_path")
             stamped_files_path = self.config.get("save_path")
-            # Alte ungestempelte loeschen
+            # Alte ungestempelte löschen
             if(os.path.exists(unstamped_files_path)):
                 for root, dirs, files in os.walk(unstamped_files_path):
                     for file in files:
@@ -95,7 +95,7 @@ class PDFStamperApp:
                                     os.remove(full_path)
                                     print(f"Datei '{file}' erfolgreich geloescht!")
                                 except FileNotFoundError: print(f"Datei '{file}' nicht gefunden.")
-            # Alte gestempelte loeschen
+            # Alte gestempelte löschen
             if(os.path.exists(stamped_files_path)):
                 for root, dirs, files in os.walk(stamped_files_path):
                     for file in files:
@@ -109,7 +109,7 @@ class PDFStamperApp:
                                 except FileNotFoundError: print(f"Datei '{file}' nicht gefunden.")
         
     def cleanup_old_stamped_files(self, config):
-        """Entfernt gestempelte Dateien die aelter als 24 Stunden sind"""
+        """Entfernt gestempelte Dateien die älter als 24 Stunden sind"""
         import time
         
         current_time = time.time()
@@ -118,7 +118,7 @@ class PDFStamperApp:
         stamped_files = config.get("stamped_files", [])
         timestamps = config.get("stamped_files_timestamps", {})
         
-        # Nur Dateien behalten die juenger als 24 Stunden sind
+        # Nur Dateien behalten die jünger als 24 Stunden sind
         new_stamped_files = []
         new_timestamps = {}
         
@@ -142,14 +142,14 @@ class PDFStamperApp:
         return "break"
     
     def get_stamp_folder(self):
-        """Gibt den Stempel-Ordner-Pfad zurueck (immer relativ zur .exe)"""
+        """Gibt den Stempel-Ordner-Pfad zurück (immer relativ zur .exe)"""
         return os.path.join(self.app_path, "Stempel")
     
     def save_config(self):
         """Konfiguration speichern"""
         self.config["stamped_files"] = self.stamped_files
         
-        # Timestamps fuer gestempelte Dateien speichern
+        # Timestamps für gestempelte Dateien speichern
         if not hasattr(self, 'stamped_files_timestamps'):
             self.stamped_files_timestamps = self.config.get("stamped_files_timestamps", {})
         
@@ -160,29 +160,29 @@ class PDFStamperApp:
     
     def create_gui(self):
         """GUI-Elemente erstellen"""
-        # Menueleiste
+        # Menüleiste
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
         
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Datei", menu=file_menu)
-        file_menu.add_command(label="PDF oeffnen", command=self.open_pdf)
+        file_menu.add_command(label="PDF öffnen", command=self.open_pdf)
         file_menu.add_command(label="PDF speichern", command=self.save_pdf)
         file_menu.add_separator()
         file_menu.add_command(label="Beenden", command=self.root.quit)
         
         self.settings_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Einstellungen", menu=self.settings_menu)
-        self.settings_menu.add_command(label="oeffnungspfad festlegen", command=self.set_open_path)
+        self.settings_menu.add_command(label="Öffnungspfad festlegen", command=self.set_open_path)
         self.settings_menu.add_command(label="Speicherpfad festlegen", command=self.set_save_path)
         self.settings_menu.add_separator()
         self.settings_menu.add_checkbutton(label="Automatisch speichern (ohne Dialog)", 
                                       command=self.toggle_auto_save,
                                       variable=self.auto_save_var)
-        self.settings_menu.add_checkbutton(label="Alte Protokolle automatisch loeschen",
+        self.settings_menu.add_checkbutton(label="Alte Protokolle automatisch löschen",
                                       command=self.toggle_auto_delete,
                                       variable=self.auto_delete_var)
-        self.settings_menu.add_command(label=f"Loesche Protokolle aelter {self.config.get("auto_delete_time")}h", command=self.set_delete_time) 
+        self.settings_menu.add_command(label=f"Lösche Protokolle älter {self.config.get('auto_delete_time')}h", command=self.set_delete_time) 
                                       
         info_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="?", menu=info_menu)
@@ -200,19 +200,19 @@ class PDFStamperApp:
         stamp_label = tk.Label(left_frame, text="Stempel:", font=("Arial", 10, "bold"))
         stamp_label.pack(pady=5)
         
-        # Vorschau des ausgewaehlten Stempels
+        # Vorschau des ausgewählten Stempels
         self.preview_frame = tk.Frame(left_frame, relief=tk.SUNKEN, borderwidth=2, bg="white", height=80)
         self.preview_frame.pack(fill=tk.X, padx=5, pady=5)
         self.preview_frame.pack_propagate(False)
         
-        self.preview_label = tk.Label(self.preview_frame, text="Kein Stempel ausgewaehlt", bg="white", fg="gray")
+        self.preview_label = tk.Label(self.preview_frame, text="Kein Stempel ausgewählt", bg="white", fg="gray")
         self.preview_label.pack(expand=True)
         
-        # Button zum Abwaehlen des Stempels
-        deselect_btn = tk.Button(left_frame, text="Stempel abwaehlen", command=self.deselect_stamp)
+        # Button zum Abwählen des Stempels
+        deselect_btn = tk.Button(left_frame, text="Stempel abwählen", command=self.deselect_stamp)
         deselect_btn.pack(pady=5)
         
-        # Button zum Loeschen aller Stempel
+        # Button zum Löschen aller Stempel
         clear_btn = tk.Button(left_frame, text="🗑️ Alle Stempel entfernen", 
                               command=self.clear_all_stamps, bg="salmon")
         clear_btn.pack(pady=5)
@@ -242,7 +242,7 @@ class PDFStamperApp:
         file_frame = tk.Frame(left_frame, relief=tk.SUNKEN, borderwidth=2)
         file_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Listbox mit fester Schriftart fuer richtige Ausrichtung
+        # Listbox mit fester Schriftart für richtige Ausrichtung
         self.file_listbox = tk.Listbox(file_frame, font=("Courier New", 9))
         file_scrollbar = tk.Scrollbar(file_frame, command=self.file_listbox.yview)
         self.file_listbox.configure(yscrollcommand=file_scrollbar.set)
@@ -252,7 +252,7 @@ class PDFStamperApp:
         
         self.file_listbox.bind('<Double-Button-1>', self.open_from_list)
         
-        open_btn = tk.Button(left_frame, text="Ausgewaehlte Datei oeffnen", command=self.open_from_list)
+        open_btn = tk.Button(left_frame, text="Ausgewählte Datei öffnen", command=self.open_from_list)
         open_btn.pack(pady=5)
         
         # Rechte Seite - PDF-Anzeige
@@ -263,10 +263,10 @@ class PDFStamperApp:
         toolbar = tk.Frame(right_frame)
         toolbar.pack(fill=tk.X, padx=5, pady=5)
         
-        tk.Button(toolbar, text="📁 PDF oeffnen", command=self.open_pdf, 
+        tk.Button(toolbar, text="📁 PDF öffnen", command=self.open_pdf, 
                  bg="lightblue", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=5)
         tk.Button(toolbar, text="Vorherige Seite", command=self.prev_page).pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="Naechste Seite", command=self.next_page).pack(side=tk.LEFT, padx=2)
+        tk.Button(toolbar, text="Nächste Seite", command=self.next_page).pack(side=tk.LEFT, padx=2)
         
         self.page_label = tk.Label(toolbar, text="Keine PDF geladen")
         self.page_label.pack(side=tk.LEFT, padx=10)
@@ -282,7 +282,7 @@ class PDFStamperApp:
         filename_frame = tk.Frame(right_frame, bg="lightgray", relief=tk.SUNKEN, borderwidth=1)
         filename_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
         
-        self.filename_label = tk.Label(filename_frame, text="Keine Datei geoeffnet", 
+        self.filename_label = tk.Label(filename_frame, text="Keine Datei geöffnet", 
                                        bg="lightgray", anchor="w", padx=10, pady=5)
         self.filename_label.pack(fill=tk.X)
         
@@ -344,7 +344,7 @@ class PDFStamperApp:
         self.stamp_canvas.configure(scrollregion=self.stamp_canvas.bbox("all"))
     
     def select_stamp(self, stamp_path):
-        """Stempel auswaehlen und Vorschau anzeigen"""
+        """Stempel auswählen und Vorschau anzeigen"""
         self.selected_stamp = stamp_path
         
         # Vorschau aktualisieren
@@ -356,13 +356,13 @@ class PDFStamperApp:
             self.preview_label.configure(image=photo, text="")
             self.preview_label.image = photo  # Referenz behalten
         except:
-            self.preview_label.configure(image="", text=f"Ausgewaehlt: {os.path.basename(stamp_path)}")
+            self.preview_label.configure(image="", text=f"Ausgewählt: {os.path.basename(stamp_path)}")
             self.preview_label.image = None
     
     def deselect_stamp(self):
         """Stempel-Auswahl aufheben"""
         self.selected_stamp = None
-        self.preview_label.configure(image="", text="Kein Stempel ausgewaehlt", fg="gray")
+        self.preview_label.configure(image="", text="Kein Stempel ausgewählt", fg="gray")
         self.preview_label.image = None
         
     def show_info(self):
@@ -371,13 +371,13 @@ class PDFStamperApp:
     def clear_all_stamps(self):
         """Alle Stempel von der aktuellen PDF entfernen"""
         if not self.pdf_document or not self.current_pdf:
-            messagebox.showwarning("Warnung", "Keine PDF geoeffnet.")
+            messagebox.showwarning("Warnung", "Keine PDF geöffnet.")
             return
         
-        # Bestaetigungsdialog
+        # Bestätigungsdialog
         result = messagebox.askyesno(
             "Alle Stempel entfernen", 
-            "Moechten Sie wirklich alle Stempel von dieser PDF entfernen?\n\nDie Original-PDF wird neu geladen."
+            "Möchten Sie wirklich alle Stempel von dieser PDF entfernen?\n\nDie Original-PDF wird neu geladen."
         )
         
         if result:
@@ -394,19 +394,19 @@ class PDFStamperApp:
                 messagebox.showerror("Fehler", f"Fehler beim Entfernen der Stempel:\n{str(e)}")
     
     def watch_folder(self):
-        """ueberwachten Ordner auf neue PDF-Dateien pruefen (inkl. Unterordner)"""
+        """Überwachten Ordner auf neue PDF-Dateien prüfen (inkl. Unterordner)"""
         self.scan_folder_now()
-        self.root.after(2000, self.watch_folder)  # Alle 2 Sekunden pruefen
+        self.root.after(2000, self.watch_folder)  # Alle 2 Sekunden prüfen
     
     def scan_folder_now(self):
-        """Fuehrt den Ordner-Scan sofort aus"""
+        """Führt den Ordner-Scan sofort aus"""
         open_path = self.config.get("open_path", "")
         
         if os.path.exists(open_path):
             try:
                 from datetime import datetime, timedelta
                 
-                # Zeitgrenze: 12 Stunden zurueck
+                # Zeitgrenze: 12 Stunden zurück
                 time_limit = datetime.now().timestamp() - (12 * 60 * 60)
                 
                 # Alle PDF-Dateien inkl. Unterordner finden
@@ -415,16 +415,16 @@ class PDFStamperApp:
                     for file in files:
                         if file.lower().endswith('.pdf'):
                             full_path = os.path.normpath(os.path.join(root, file))
-                            # Relativen Pfad zum ueberwachten Ordner erstellen
+                            # Relativen Pfad zum überwachten Ordner erstellen
                             rel_path = os.path.relpath(full_path, open_path)
-                            # aenderungszeit ermitteln
+                            # Änderungszeit ermitteln
                             mtime = os.path.getmtime(full_path)
                             
                             # Nur Dateien der letzten 12 Stunden
                             if mtime >= time_limit:
                                 all_pdf_files.append((rel_path, mtime, full_path))
                 
-                # Nach aenderungszeit sortieren (neueste zuerst)
+                # Nach Änderungszeit sortieren (neueste zuerst)
                 all_pdf_files.sort(key=lambda x: x[1], reverse=True)
                 
                 # Gestempelte Dateien filtern wenn aktiviert
@@ -435,7 +435,7 @@ class PDFStamperApp:
                         continue
                     pdf_files.append(item)
                 
-                # Liste immer aktualisieren (auch bei Filteraenderung)
+                # Liste immer aktualisieren (auch bei Filteränderung)
                 self.watch_files = [f[0] for f in pdf_files]
                 self.update_file_list_display(all_pdf_files)
                         
@@ -443,8 +443,8 @@ class PDFStamperApp:
                 pass  # Fehler ignorieren
     
     def update_file_list(self):
-        """Liste manuell aktualisieren (z.B. bei Checkbox-aenderung)"""
-        self.watch_files = []  # Erzwingt Update beim naechsten Scan
+        """Liste manuell aktualisieren (z.B. bei Checkbox-Änderung)"""
+        self.watch_files = []  # Erzwingt Update beim nächsten Scan
         # Sofort neu scannen statt auf Timer zu warten
         self.root.after(100, self.scan_folder_now)
     
@@ -453,7 +453,7 @@ class PDFStamperApp:
         from datetime import datetime
         
         self.file_listbox.delete(0, tk.END)
-        self.file_paths = {}  # Mapping zuruecksetzen
+        self.file_paths = {}  # Mapping zurücksetzen
         
         # Filterung basierend auf Checkbox
         pdf_files = []
@@ -470,30 +470,30 @@ class PDFStamperApp:
             # Zeitstempel formatieren
             time_str = datetime.fromtimestamp(mtime).strftime("%d.%m.%Y %H:%M")
             
-            # Markierung fuer gestempelte Dateien
+            # Markierung für gestempelte Dateien
             marker = "✓ " if full_path in self.stamped_files else "  "
             
-            # Dateiname eventuell kuerzen wenn zu lang (max 30 Zeichen)
+            # Dateiname eventuell kürzen wenn zu lang (max 30 Zeichen)
             max_filename_len = 30
             if len(filename) > max_filename_len:
                 display_filename = filename[:max_filename_len-3] + "..."
             else:
                 display_filename = filename
             
-            # Feste Breite fuer Dateiname (linksbuendig) + Zeitstempel (rechtsbuendig)
+            # Feste Breite für Dateiname (linksbündig) + Zeitstempel (rechtsbündig)
             spaces = max(1, 35 - len(display_filename))
             display_text = f"{marker}{display_filename}{' ' * spaces}[{time_str}]"
             self.file_listbox.insert(tk.END, display_text)
             
-            # Mapping speichern: Anzeigename -> vollstaendiger Pfad
+            # Mapping speichern: Anzeigename -> vollständiger Pfad
             self.file_paths[display_text] = full_path
             
-            # Gestempelte Dateien grau faerben
+            # Gestempelte Dateien grau färben
             if full_path in self.stamped_files:
                 self.file_listbox.itemconfig(tk.END, fg="gray")
     
     def open_from_list(self, event=None):
-        """PDF aus der Dateiliste oeffnen"""
+        """PDF aus der Dateiliste öffnen"""
         selection = self.file_listbox.curselection()
         if not selection:
             return
@@ -501,7 +501,7 @@ class PDFStamperApp:
         # Text aus Listbox holen
         display_text = self.file_listbox.get(selection[0])
         
-        # Vollstaendigen Pfad aus Mapping holen
+        # Vollständigen Pfad aus Mapping holen
         filepath = self.file_paths.get(display_text)
         
         if filepath and os.path.exists(filepath):
@@ -510,11 +510,11 @@ class PDFStamperApp:
             messagebox.showerror("Fehler", f"Datei nicht gefunden")
     
     def open_pdf(self, filepath=None):
-        """PDF-Datei oeffnen"""
+        """PDF-Datei öffnen"""
         if not filepath:
             filepath = filedialog.askopenfilename(
                 initialdir=self.config.get("open_path", ""),
-                title="PDF oeffnen",
+                title="PDF öffnen",
                 filetypes=[("PDF-Dateien", "*.pdf")]
             )
         
@@ -532,7 +532,7 @@ class PDFStamperApp:
             
             self.display_page()
         except Exception as e:
-            messagebox.showerror("Fehler", f"PDF konnte nicht geoeffnet werden:\n{str(e)}")
+            messagebox.showerror("Fehler", f"PDF konnte nicht geöffnet werden:\n{str(e)}")
     
     def display_page(self):
         """Aktuelle PDF-Seite anzeigen"""
@@ -562,13 +562,13 @@ class PDFStamperApp:
             self.display_page()
     
     def next_page(self):
-        """Naechste Seite anzeigen"""
+        """Nächste Seite anzeigen"""
         if self.pdf_document and self.current_page < len(self.pdf_document) - 1:
             self.current_page += 1
             self.display_page()
     
     def zoom_in(self):
-        """Vergroeßern"""
+        """Vergrößern"""
         self.zoom = min(self.zoom + 0.2, 3.0)
         self.display_page()
     
@@ -580,7 +580,7 @@ class PDFStamperApp:
     def place_stamp(self, event):
         """Stempel an Mausposition platzieren (zentriert)"""
         if not self.selected_stamp or not self.pdf_document:
-            messagebox.showwarning("Warnung", "Bitte waehlen Sie zuerst einen Stempel und oeffnen Sie eine PDF.")
+            messagebox.showwarning("Warnung", "Bitte wählen Sie zuerst einen Stempel und öffnen Sie eine PDF.")
             return
         
         # Koordinaten relativ zum Canvas
@@ -596,7 +596,7 @@ class PDFStamperApp:
             # Stempel-Bild laden
             stamp_img = Image.open(self.selected_stamp)
             
-            # Stempel-Groeße (in PDF-Punkten) - Hoehe ist fix, Breite proportional
+            # Stempel-Größe (in PDF-Punkten) - Höhe ist fix, Breite proportional
             stamp_height = 40
             stamp_width = stamp_img.width * (stamp_height / stamp_img.height)
             
@@ -604,7 +604,7 @@ class PDFStamperApp:
             centered_x = pdf_x - (stamp_width / 2)
             centered_y = pdf_y - (stamp_height / 2)
             
-            # Stempel zur PDF hinzufuegen
+            # Stempel zur PDF hinzufügen
             rect = fitz.Rect(centered_x, centered_y, centered_x + stamp_width, centered_y + stamp_height)
             
             # Bild in Bytes konvertieren
@@ -624,7 +624,7 @@ class PDFStamperApp:
         """Gestempelte PDF speichern"""
         self.cleanup_old_files()
         if not self.pdf_document:
-            messagebox.showwarning("Warnung", "Keine PDF geoeffnet.")
+            messagebox.showwarning("Warnung", "Keine PDF geöffnet.")
             return
         
         filename = os.path.basename(self.current_pdf)
@@ -657,7 +657,7 @@ class PDFStamperApp:
                     
                 
                 if self.config.get("auto_save", False):
-                    # Kurze Bestaetigung bei Auto-Save
+                    # Kurze Bestätigung bei Auto-Save
                     self.filename_label.config(text=f"✅ Gespeichert: {os.path.basename(filepath)}")
                     #self.root.after(3000, lambda: self.filename_label.config(text=f"📄 {os.path.basename(self.current_pdf)}"))
                     self.close_pdf()
@@ -668,7 +668,7 @@ class PDFStamperApp:
                 messagebox.showerror("Fehler", f"PDF konnte nicht gespeichert werden:\n{str(e)}")
     
     def close_pdf(self):
-        """Schließt die aktuell geoeffnete PDF"""
+        """Schließt die aktuell geöffnete PDF"""
         if self.pdf_document:
             self.pdf_document.close()
             self.pdf_document = None
@@ -677,23 +677,23 @@ class PDFStamperApp:
             self.zoom = 1.0
             self.pdf_canvas.delete("all")
             self.page_label.config(text="Keine PDF geladen")
-            self.root.after(3000, lambda: self.filename_label.config(text="Keine Datei geoeffnet"))
+            self.root.after(3000, lambda: self.filename_label.config(text="Keine Datei geöffnet"))
         
 
     def set_open_path(self):
-        """oeffnungspfad festlegen"""
-        path = filedialog.askdirectory(title="oeffnungspfad waehlen")
+        """Öffnungspfad festlegen"""
+        path = filedialog.askdirectory(title="Öffnungspfad wählen")
         if path:
             self.config["open_path"] = path
             self.save_config()
-            self.watch_files = []  # Liste zuruecksetzen
+            self.watch_files = []  # Liste zurücksetzen
             self.file_listbox.delete(0, tk.END)  # Listbox leeren
-            messagebox.showinfo("Erfolg", f"oeffnungspfad festgelegt:\n{path}")
+            messagebox.showinfo("Erfolg", f"Öffnungspfad festgelegt:\n{path}")
             
     def set_delete_time(self):
         inputbox = tk.Tk()
-        inputbox.title("Loesche Protokolle aelter X Stunden")
-        tk.Label(inputbox, text='Zeit in Stunden nach der alte Protokolle geloescht werden sollen').pack()
+        inputbox.title("Lösche Protokolle älter X Stunden")
+        tk.Label(inputbox, text='Zeit in Stunden nach der alte Protokolle gelöscht werden sollen').pack()
         entry = tk.Entry(inputbox)
         entry.pack()
         
@@ -703,7 +703,7 @@ class PDFStamperApp:
         def save_delete_time_in_config():
             eingabewert = entry.get()  # Direkt vom Entry-Widget holen
             
-            # Debug: Schauen was tatsaechlich ausgelesen wird
+            # Debug: Schauen was tatsächlich ausgelesen wird
             print(f"Eingabewert: '{eingabewert}'")
             
             if not eingabewert or eingabewert.strip() == '' or eingabewert.strip() == '0':
@@ -713,18 +713,18 @@ class PDFStamperApp:
             try:
                 self.config["auto_delete_time"] = int(eingabewert.strip())
                 self.save_config()
-                self.settings_menu.entryconfig(5, label=f"Loesche Protokolle aelter {self.config.get('auto_delete_time')}h")
+                self.settings_menu.entryconfig(5, label=f"Lösche Protokolle älter {self.config.get('auto_delete_time')}h")
             
                 inputbox.destroy()
             except ValueError:
-                error_label.config(text='Bitte eine gueltige Zahl eingeben!')
+                error_label.config(text='Bitte eine gültige Zahl eingeben!')
         
         tk.Button(inputbox, text='Speichern', command=save_delete_time_in_config).pack()
         entry.bind('<Return>', lambda e: save_delete_time_in_config())
     
     def set_save_path(self):
         """Speicherpfad festlegen"""
-        path = filedialog.askdirectory(title="Speicherpfad waehlen")
+        path = filedialog.askdirectory(title="Speicherpfad wählen")
         if path:
             self.config["save_path"] = path
             self.save_config()
