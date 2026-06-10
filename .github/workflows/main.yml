@@ -20,6 +20,9 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
+        pip install fitz
+        pip install tkinter
+        pip install json
   
     - name: Exe kompilieren
       run: |
