@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 import fitz  # PyMuPDF
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 import io
 import shutil
 import time
@@ -43,6 +43,7 @@ class PDFStamperApp:
         self.page_positions = []   # (page_index, y_start, y_end) für alle sichtbaren Seiten
         self.page_photo_refs = []  # Referenzen auf PhotoImage-Objekte (verhindert GC)
         self.stamped_pages = set() # Seitenindizes auf denen ein Stempel platziert wurde
+        self._fa_icons = {}        # PhotoImage-Referenzen (verhindert GC)
         self.auto_save_var = tk.BooleanVar(value=self.config.get("auto_save", False))
         self.auto_delete_var=tk.BooleanVar(value=self.config.get("auto_delete", False))
         
@@ -150,6 +151,13 @@ class PDFStamperApp:
         self.F_BTN_SEC  = ("Segoe UI", 11)
         self.F_MONO     = ("Courier New", 10)
 
+        # Font Awesome Solid Codepoints
+        self.IC_FOLDER = ""
+        self.IC_SAVE   = ""
+        self.IC_TRASH  = ""
+        self.IC_FILE   = ""
+        self.IC_CHECK  = ""
+
     def _btn(self, parent, text, command, style="secondary", **kwargs):
         """Erstellt einen gestylten Button mit Hover-Effekt"""
         if style == "primary":
@@ -162,8 +170,11 @@ class PDFStamperApp:
             bg, fg, hov, pre = self.C_SURFACE, self.C_TEXT, self.C_BORDER, self.C_BORDER
             font, px, py = self.F_BTN_SEC, 10, 6
 
+        if kwargs.get("image") is None:
+            kwargs.pop("image", None)
+            kwargs.pop("compound", None)
         btn = tk.Button(parent, text=text, command=command,
-                        bg=bg, fg=fg, font=font,
+                        bg=bg, fg=fg, font=kwargs.pop("font", font),
                         relief=tk.FLAT, bd=0, padx=px, pady=py,
                         activebackground=pre, activeforeground=fg,
                         cursor="hand2", **kwargs)
@@ -176,6 +187,24 @@ class PDFStamperApp:
     def _section_label(self, parent, text):
         return tk.Label(parent, text=text, font=self.F_HEADING,
                         bg=self.C_BG, fg=self.C_TEXT, anchor="w")
+
+    def _fa_icon(self, codepoint, size=14, color="#FFFFFF"):
+        """Rendert ein Font Awesome Solid Icon als PhotoImage (fallback: None)"""
+        font_path = os.path.join(self.app_path, "fonts", "fa-solid-900.ttf")
+        if not os.path.exists(font_path):
+            return None
+        try:
+            fa = ImageFont.truetype(font_path, size)
+            dummy = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+            bbox = dummy.textbbox((0, 0), codepoint, font=fa)
+            w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+            ImageDraw.Draw(img).text((-bbox[0], -bbox[1]), codepoint,
+                                     font=fa, fill=(r, g, b, 255))
+            return ImageTk.PhotoImage(img)
+        except Exception:
+            return None
 
     def _dialog(self, title, width=420):
         """Erstellt ein gestyltes Toplevel-Dialogfenster"""
@@ -208,7 +237,7 @@ class PDFStamperApp:
         content.pack(fill=tk.BOTH, expand=True, padx=24, pady=(20, 8))
         icons = {"info": ("ℹ", self.C_PRIMARY), "warning": ("⚠", "#E6A817"), "error": ("✕", self.C_DANGER_FG)}
         icon_char, icon_color = icons.get(kind, icons["info"])
-        tk.Label(content, text=icon_char, font=("Segoe UI", 20), bg=self.C_BG,
+        tk.Label(content, text=icon_char, font=("Segoe UI Symbol", 20), bg=self.C_BG,
                  fg=icon_color).pack(side=tk.LEFT, anchor="n", padx=(0, 14))
         tk.Label(content, text=message, font=self.F_BODY, bg=self.C_BG, fg=self.C_TEXT,
                  justify=tk.LEFT, wraplength=340).pack(side=tk.LEFT, fill=tk.X, expand=True, anchor="n")
@@ -242,6 +271,13 @@ class PDFStamperApp:
     def create_gui(self):
         """GUI-Elemente erstellen"""
         self.root.configure(bg=self.C_BG)
+
+        # Font Awesome Icons vorrendern (None wenn Font nicht vorhanden)
+        self._fa_icons["folder"] = self._fa_icon(self.IC_FOLDER, size=13, color=self.C_WHITE)
+        self._fa_icons["save"]   = self._fa_icon(self.IC_SAVE,   size=13, color=self.C_WHITE)
+        self._fa_icons["trash"]  = self._fa_icon(self.IC_TRASH,  size=12, color=self.C_DANGER_FG)
+        self._fa_icons["file"]   = self._fa_icon(self.IC_FILE,   size=13, color=self.C_PRIMARY)
+        self._fa_icons["check"]  = self._fa_icon(self.IC_CHECK,  size=13, color=self.C_PRIMARY)
 
         # ── Menüleiste ──────────────────────────────────────────────────────
         def _menu(parent=None):
@@ -316,8 +352,9 @@ class PDFStamperApp:
         stamp_btn_row.pack(fill=tk.X, padx=8, pady=4)
         self._btn(stamp_btn_row, "Stempel abwählen",
                   command=self.deselect_stamp).pack(side=tk.LEFT, padx=(0, 4))
-        self._btn(stamp_btn_row, "🗑️ Alle entfernen",
-                  command=self.clear_all_stamps, style="danger").pack(side=tk.LEFT)
+        self._btn(stamp_btn_row, "Alle entfernen",
+                  command=self.clear_all_stamps, style="danger",
+                  image=self._fa_icons["trash"], compound=tk.LEFT).pack(side=tk.LEFT)
 
         stamp_panel = tk.Frame(left_frame, bg=self.C_BG,
                                highlightthickness=1, highlightbackground=self.C_BORDER)
@@ -359,10 +396,12 @@ class PDFStamperApp:
         toolbar = tk.Frame(right_frame, bg=self.C_BG)
         toolbar.pack(fill=tk.X, padx=8, pady=8)
 
-        self._btn(toolbar, "📁 PDF öffnen", command=self.open_pdf,
-                  style="primary").pack(side=tk.LEFT, padx=(0, 4))
-        self._btn(toolbar, "◀", command=self.prev_page).pack(side=tk.LEFT, padx=2)
-        self._btn(toolbar, "▶", command=self.next_page).pack(side=tk.LEFT, padx=(2, 8))
+        self._btn(toolbar, "PDF öffnen", command=self.open_pdf, style="primary",
+                  image=self._fa_icons["folder"], compound=tk.LEFT).pack(side=tk.LEFT, padx=(0, 4))
+        self._btn(toolbar, "◀", command=self.prev_page,
+                  font=("Segoe UI Symbol", 11)).pack(side=tk.LEFT, padx=2)
+        self._btn(toolbar, "▶", command=self.next_page,
+                  font=("Segoe UI Symbol", 11)).pack(side=tk.LEFT, padx=(2, 8))
 
         self.page_label = tk.Label(toolbar, text="Keine PDF geladen",
                                    bg=self.C_BG, fg=self.C_HINT, font=self.F_SMALL)
@@ -371,8 +410,8 @@ class PDFStamperApp:
         self._btn(toolbar, "Zoom +", command=self.zoom_in).pack(side=tk.LEFT, padx=2)
         self._btn(toolbar, "Zoom −", command=self.zoom_out).pack(side=tk.LEFT, padx=2)
 
-        self._btn(toolbar, "💾 Speichern", command=self.save_pdf,
-                  style="primary").pack(side=tk.RIGHT, padx=(4, 0))
+        self._btn(toolbar, "Speichern", command=self.save_pdf, style="primary",
+                  image=self._fa_icons["save"], compound=tk.LEFT).pack(side=tk.RIGHT, padx=(4, 0))
 
         filename_bar = tk.Frame(right_frame, bg=self.C_WHITE, height=30,
                                 highlightthickness=1, highlightbackground=self.C_BORDER)
@@ -610,7 +649,7 @@ class PDFStamperApp:
             self.stamped_pages = set()
 
             filename = os.path.basename(filepath)
-            self.filename_label.config(text=f"📄 {filename}", fg=self.C_TEXT)
+            self.filename_label.config(text=filename, fg=self.C_TEXT)
 
             self.display_all_pages()
         except Exception as e:
@@ -869,7 +908,7 @@ class PDFStamperApp:
             # Als gestempelt markieren
             
 
-            self.filename_label.config(text=f"✅ Gespeichert: {out_pdf_name}", fg=self.C_PRIMARY)
+            self.filename_label.config(text=f"Gespeichert: {out_pdf_name}", fg=self.C_PRIMARY)
             self.close_pdf()
 
         except Exception as e:
