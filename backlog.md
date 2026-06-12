@@ -1,4 +1,1 @@
-- Liste mit zu berücksichtigen Programmen in Einstellungen
-- dfq Dateien Suche mit zeitstempel der pdf
-- dfq Ordner entweder einstellbar oder gleich PDF ordner
-- PDF und dfq kopieren, bei Erfolg alte in Archiv, Archiv nach einer Woche löschen
+done

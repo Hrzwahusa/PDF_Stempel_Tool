@@ -1,0 +1,15 @@
+# Testdaten
+/Tests
+
+# Kompilierte Dateien
+*.exe
+dist/
+build/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Lokale Konfiguration (enthält benutzerspezifische Pfade)
+pdf_stamper_config.json
