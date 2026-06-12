@@ -18,12 +18,10 @@ class PDFStamperApp:
         self.root.title("PDF Stempel Tool")
         self.root.geometry("1200x800")
         
-        # Pfad zum Verzeichnis der ausführbaren Datei
+        # Pfad zum Verzeichnis der ausführbaren Datei (für Stempel, Config)
         if getattr(sys, 'frozen', False):
-            # Wenn als .exe kompiliert
             self.app_path = os.path.dirname(sys.executable)
         else:
-            # Wenn als Python-Skript ausgeführt
             self.app_path = os.path.dirname(os.path.abspath(__file__))
         
         # Konfigurationsdatei
@@ -118,6 +116,14 @@ class PDFStamperApp:
             self.pdf_canvas.yview_scroll(-1, "units")
         return "break"
     
+    def _resource_path(self, *parts):
+        """Pfad zu gebündelten Ressourcen: sys._MEIPASS bei .exe, sonst app_path"""
+        if getattr(sys, 'frozen', False):
+            base = sys._MEIPASS
+        else:
+            base = self.app_path
+        return os.path.join(base, *parts)
+
     def get_stamp_folder(self):
         """Gibt den Stempel-Ordner-Pfad zurück (immer relativ zur .exe)"""
         return os.path.join(self.app_path, "Stempel")
@@ -190,7 +196,7 @@ class PDFStamperApp:
 
     def _fa_icon(self, codepoint, size=14, color="#FFFFFF"):
         """Rendert ein Font Awesome Solid Icon als PhotoImage (fallback: None)"""
-        font_path = os.path.join(self.app_path, "fonts", "fa-solid-900.ttf")
+        font_path = self._resource_path("fonts", "fa-solid-900.ttf")
         if not os.path.exists(font_path):
             return None
         try:
