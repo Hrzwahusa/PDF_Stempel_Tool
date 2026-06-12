@@ -796,10 +796,20 @@ class PDFStamperApp:
         return None
 
     def extract_timestamp(self, filename):
-        """Extrahiert einen 14-stelligen Zeitstempel (YYYYMMDDHHmmss) aus dem Dateinamen"""
-        import re
-        match = re.search(r'\d{14}', filename)
-        return match.group(0) if match else None
+      """Extrahiert einen Zeitstempel (YYYYMMDDHHmmss) aus dem Dateinamen"""
+      import re
+    
+      # 14-stellig: YYYYMMDDHHmmss
+      match = re.search(r'\d{14}', filename)
+      if match:
+          return match.group(0)
+    
+      # Mit Unterstrich: YYYYMMDD_HHmmss
+      match = re.search(r'(\d{8})_(\d{6})', filename)
+      if match:
+          return match.group(1) + match.group(2)
+    
+      return None
 
     def find_dfq_file(self, pdf_filename):
         """Sucht passende DFQ-Datei (gleiche Werkstück/Mblatt/Zustand-Teile + gleicher Zeitstempel)"""
