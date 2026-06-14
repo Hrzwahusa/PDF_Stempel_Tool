@@ -16,7 +16,6 @@ class PDFStamperApp:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Stempel Tool")
-        self.root.geometry("1200x800")
         
         # Pfad zum Verzeichnis der ausführbaren Datei (für Stempel, Config)
         if getattr(sys, 'frozen', False):
@@ -46,6 +45,17 @@ class PDFStamperApp:
         self.auto_delete_var=tk.BooleanVar(value=self.config.get("auto_delete", False))
         self.simple_stamp_var = tk.BooleanVar(value=self.config.get("simple_stamp_mode", False))
         
+        # Skalierungsfaktor relativ zu 1920px Referenzbreite
+        self.root.update_idletasks()
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        self.scale = max(0.75, min(2.0, sw / 1920))
+        self.s = lambda n: max(1, round(n * self.scale))
+        win_w = min(self.s(1200), sw - 50)
+        win_h = min(self.s(800),  sh - 80)
+        self.root.geometry(f"{win_w}x{win_h}")
+        self.root.minsize(self.s(700), self.s(450))
+
         # Theme + GUI erstellen
         self._setup_theme()
         self.create_gui()
@@ -112,13 +122,18 @@ class PDFStamperApp:
                                 except FileNotFoundError: print(f"Datei '{file}' nicht gefunden.")
         
     def on_mousewheel(self, event):
-        """Mausrad-Scrollen im PDF Canvas"""
-        if event.num == 5 or event.delta < 0:
-            # Scroll down
-            self.pdf_canvas.yview_scroll(1, "units")
-        elif event.num == 4 or event.delta > 0:
-            # Scroll up
-            self.pdf_canvas.yview_scroll(-1, "units")
+        """Mausrad im PDF Canvas: Ctrl+Rad → Zoom, sonst Scrollen"""
+        ctrl = (event.state & 0x4) != 0
+        if ctrl:
+            if event.num == 5 or event.delta < 0:
+                self.zoom_out()
+            elif event.num == 4 or event.delta > 0:
+                self.zoom_in()
+        else:
+            if event.num == 5 or event.delta < 0:
+                self.pdf_canvas.yview_scroll(1, "units")
+            elif event.num == 4 or event.delta > 0:
+                self.pdf_canvas.yview_scroll(-1, "units")
         return "break"
     
     def _resource_path(self, *parts):
@@ -155,12 +170,13 @@ class PDFStamperApp:
         self.C_DANGER_HV = "#FEE2E2"
         self.C_CANVAS_BG = "#3A3F47"   # Dunkler Hintergrund für PDF-Canvas
 
-        self.F_HEADING  = ("Segoe UI", 13, "bold")
-        self.F_BODY     = ("Segoe UI", 13)
-        self.F_SMALL    = ("Segoe UI", 11)
-        self.F_BTN_PRI  = ("Segoe UI", 13)
-        self.F_BTN_SEC  = ("Segoe UI", 11)
-        self.F_MONO     = ("Courier New", 10)
+        _fs = lambda n: max(8, round(n * max(0.75, min(1.5, self.scale))))
+        self.F_HEADING  = ("Segoe UI", _fs(13), "bold")
+        self.F_BODY     = ("Segoe UI", _fs(13))
+        self.F_SMALL    = ("Segoe UI", _fs(11))
+        self.F_BTN_PRI  = ("Segoe UI", _fs(13))
+        self.F_BTN_SEC  = ("Segoe UI", _fs(11))
+        self.F_MONO     = ("Courier New", _fs(10))
 
         # Font Awesome Solid Codepoints
         self.IC_FOLDER = ""
@@ -173,13 +189,13 @@ class PDFStamperApp:
         """Erstellt einen gestylten Button mit Hover-Effekt"""
         if style == "primary":
             bg, fg, hov, pre = self.C_PRIMARY, self.C_WHITE, self.C_PRI_HOV, self.C_PRI_PRE
-            font, px, py = self.F_BTN_PRI, 16, 8
+            font, px, py = self.F_BTN_PRI, self.s(16), self.s(8)
         elif style == "danger":
             bg, fg, hov, pre = self.C_DANGER_BG, self.C_DANGER_FG, self.C_DANGER_HV, self.C_DANGER_HV
-            font, px, py = self.F_BTN_SEC, 10, 6
+            font, px, py = self.F_BTN_SEC, self.s(10), self.s(6)
         else:
             bg, fg, hov, pre = self.C_SURFACE, self.C_TEXT, self.C_BORDER, self.C_BORDER
-            font, px, py = self.F_BTN_SEC, 10, 6
+            font, px, py = self.F_BTN_SEC, self.s(10), self.s(6)
 
         if kwargs.get("image") is None:
             kwargs.pop("image", None)
@@ -219,6 +235,7 @@ class PDFStamperApp:
 
     def _dialog(self, title, width=420):
         """Erstellt ein gestyltes Toplevel-Dialogfenster"""
+        width = self.s(width)
         dlg = tk.Toplevel(self.root)
         dlg.title(title)
         dlg.configure(bg=self.C_BG)
@@ -284,11 +301,11 @@ class PDFStamperApp:
         self.root.configure(bg=self.C_BG)
 
         # Font Awesome Icons vorrendern (None wenn Font nicht vorhanden)
-        self._fa_icons["folder"] = self._fa_icon(self.IC_FOLDER, size=13, color=self.C_WHITE)
-        self._fa_icons["save"]   = self._fa_icon(self.IC_SAVE,   size=13, color=self.C_WHITE)
-        self._fa_icons["trash"]  = self._fa_icon(self.IC_TRASH,  size=12, color=self.C_DANGER_FG)
-        self._fa_icons["file"]   = self._fa_icon(self.IC_FILE,   size=13, color=self.C_PRIMARY)
-        self._fa_icons["check"]  = self._fa_icon(self.IC_CHECK,  size=13, color=self.C_PRIMARY)
+        self._fa_icons["folder"] = self._fa_icon(self.IC_FOLDER, size=self.s(13), color=self.C_WHITE)
+        self._fa_icons["save"]   = self._fa_icon(self.IC_SAVE,   size=self.s(13), color=self.C_WHITE)
+        self._fa_icons["trash"]  = self._fa_icon(self.IC_TRASH,  size=self.s(12), color=self.C_DANGER_FG)
+        self._fa_icons["file"]   = self._fa_icon(self.IC_FILE,   size=self.s(13), color=self.C_PRIMARY)
+        self._fa_icons["check"]  = self._fa_icon(self.IC_CHECK,  size=self.s(13), color=self.C_PRIMARY)
 
         # ── Menüleiste ──────────────────────────────────────────────────────
         def _menu(parent=None):
@@ -344,19 +361,19 @@ class PDFStamperApp:
 
         # ── Hauptcontainer ──────────────────────────────────────────────────
         main_container = tk.PanedWindow(self.root, orient=tk.HORIZONTAL,
-                                        bg=self.C_BG, sashwidth=5,
+                                        bg=self.C_BG, sashwidth=self.s(5),
                                         sashrelief=tk.FLAT, sashpad=2,
                                         borderwidth=0)
         main_container.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
         # ── Linke Seite ─────────────────────────────────────────────────────
-        left_frame = tk.Frame(main_container, width=360, bg=self.C_BG,
+        left_frame = tk.Frame(main_container, width=self.s(360), bg=self.C_BG,
                              highlightthickness=0)
-        main_container.add(left_frame, minsize=260, padx=0, pady=0)
+        main_container.add(left_frame, minsize=self.s(260), padx=0, pady=0)
 
         self._section_label(left_frame, "Stempel").pack(anchor="w", padx=8, pady=(8, 2))
 
-        self.preview_frame = tk.Frame(left_frame, bg=self.C_BG, height=80,
+        self.preview_frame = tk.Frame(left_frame, bg=self.C_BG, height=self.s(80),
                                       highlightthickness=1,
                                       highlightbackground=self.C_BORDER)
         self.preview_frame.pack(fill=tk.X, padx=8, pady=4)
@@ -525,14 +542,19 @@ class PDFStamperApp:
         dlg = tk.Toplevel(self.root)
         dlg.title("Hilfe – PDF Stempel Tool")
         dlg.configure(bg=self.C_BG)
-        dlg.resizable(False, True)
+        dlg.resizable(True, True)
         dlg.grab_set()
-        width = 580
-        dlg.minsize(width, 400)
+
+        # Initiale Größe: 50 % der Bildschirmbreite, 75 % der Bildschirmhöhe
         self.root.update_idletasks()
-        rx = self.root.winfo_rootx() + self.root.winfo_width() // 2 - width // 2
-        ry = self.root.winfo_rooty() + self.root.winfo_height() // 2 - 320
-        dlg.geometry(f"{width}x640+{rx}+{ry}")
+        sw = dlg.winfo_screenwidth()
+        sh = dlg.winfo_screenheight()
+        w  = min(max(int(sw * 0.5), 480), 1200)
+        h  = min(max(int(sh * 0.75), 400), 1000)
+        rx = self.root.winfo_rootx() + self.root.winfo_width()  // 2 - w // 2
+        ry = max(0, self.root.winfo_rooty() + self.root.winfo_height() // 2 - h // 2)
+        dlg.geometry(f"{w}x{h}+{rx}+{ry}")
+        dlg.minsize(400, 300)
 
         # Scrollbarer Bereich
         canvas = tk.Canvas(dlg, bg=self.C_BG, highlightthickness=0)
@@ -544,11 +566,24 @@ class PDFStamperApp:
         inner = tk.Frame(canvas, bg=self.C_BG)
         inner_id = canvas.create_window((0, 0), window=inner, anchor="nw")
 
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(inner_id, width=e.width))
         inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
+
+        # Mousewheel nur für diesen Dialog, Binding beim Schließen aufräumen
+        def _on_wheel(e):
+            canvas.yview_scroll(-1 if e.delta > 0 else 1, "units")
+        wheel_id = canvas.bind_all("<MouseWheel>", _on_wheel)
+        dlg.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         P = 20
+
+        # Labels mit wraplength werden hier gesammelt und bei Resize aktualisiert
+        wrap_labels = []  # (label, side_padding)
+
+        def _on_canvas_resize(e):
+            canvas.itemconfig(inner_id, width=e.width)
+            for lbl, extra in wrap_labels:
+                lbl.configure(wraplength=max(e.width - P * 2 - extra, 100))
+        canvas.bind("<Configure>", _on_canvas_resize)
 
         def render_h1(text):
             tk.Label(inner, text=text, font=("Segoe UI", 13, "bold"),
@@ -560,9 +595,11 @@ class PDFStamperApp:
                      bg=self.C_BG, fg=self.C_TEXT, anchor="w").pack(fill=tk.X, padx=P, pady=(10, 1))
 
         def render_p(text):
-            tk.Label(inner, text=text, font=self.F_BODY,
-                     bg=self.C_BG, fg=self.C_TEXT, anchor="w",
-                     justify=tk.LEFT, wraplength=width - P * 2 - 20).pack(fill=tk.X, padx=P + 4)
+            lbl = tk.Label(inner, text=text, font=self.F_BODY,
+                           bg=self.C_BG, fg=self.C_TEXT, anchor="w",
+                           justify=tk.LEFT, wraplength=w - P * 2 - 20)
+            lbl.pack(fill=tk.X, padx=P + 4)
+            wrap_labels.append((lbl, 24))
 
         def render_code(text):
             tk.Label(inner, text=text, font=("Courier New", 9),
@@ -577,9 +614,11 @@ class PDFStamperApp:
             tk.Label(row, text=str(num), font=("Segoe UI", 9, "bold"),
                      bg=self.C_PRIMARY, fg=self.C_WHITE,
                      width=2, anchor="center").pack(side=tk.LEFT, padx=(0, 8))
-            tk.Label(row, text=text, font=self.F_BODY, bg=self.C_BG, fg=self.C_TEXT,
-                     anchor="w", justify=tk.LEFT,
-                     wraplength=width - P * 2 - 50).pack(side=tk.LEFT, fill=tk.X)
+            lbl = tk.Label(row, text=text, font=self.F_BODY, bg=self.C_BG, fg=self.C_TEXT,
+                           anchor="w", justify=tk.LEFT,
+                           wraplength=w - P * 2 - 50)
+            lbl.pack(side=tk.LEFT, fill=tk.X)
+            wrap_labels.append((lbl, 54))
 
         # ── help.md laden und rendern ────────────────────────────────────────
         tk.Label(inner, text="PDF Stempel Tool – Hilfe", font=("Segoe UI", 15, "bold"),
