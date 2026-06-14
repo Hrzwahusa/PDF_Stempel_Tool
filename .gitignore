@@ -1,5 +1,8 @@
 # Testdaten
 /Tests
+/test_out
+/test_files
+/.claude
 
 # Kompilierte Dateien
 *.exe

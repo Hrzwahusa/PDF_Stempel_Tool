@@ -830,6 +830,11 @@ class PDFStamperApp:
         if not timestamp:
             return None, "Kein Zeitstempel (14 Ziffern) im PDF-Dateinamen gefunden."
 
+        # Beide Zeitstempel-Varianten abdecken: 20260614110800 und 20260614_110800
+        ts_variants = {timestamp}
+        if len(timestamp) == 14:
+            ts_variants.add(timestamp[:8] + "_" + timestamp[8:])
+
         for root, dirs, files in os.walk(dfq_path):
             for file in files:
                 if not file.lower().endswith('.dfq'):
@@ -838,7 +843,7 @@ class PDFStamperApp:
                 if (p1.lower() in file_lower and
                     p2.lower() in file_lower and
                     p3.lower() in file_lower and
-                    timestamp in file):
+                    any(ts in file for ts in ts_variants)):
                     return os.path.join(root, file), None
 
         return None, (
