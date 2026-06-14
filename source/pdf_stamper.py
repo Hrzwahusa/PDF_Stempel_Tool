@@ -56,6 +56,10 @@ class PDFStamperApp:
         self.root.geometry(f"{win_w}x{win_h}")
         self.root.minsize(self.s(700), self.s(450))
 
+        icon_path = self._resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.root.iconbitmap(icon_path)
+
         # Theme + GUI erstellen
         self._setup_theme()
         self.create_gui()
