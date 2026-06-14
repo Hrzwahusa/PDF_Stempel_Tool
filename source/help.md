@@ -41,6 +41,11 @@ PDF und DFQ brauchen denselben Zeitstempel – so findet das Tool die zusammenge
 ```
 0001 300 049 (C);0001 300 049 (f);V1-SLF_20260614_143022.pdf
 0001 300 049 (C);0001 300 049 (f);V1-SLF_20260614_143022.dfq
+
+oder
+
+0001 300 049 (C);0001 300 049 (f);V1-SLF_20260614_143022.pdf
+0001 300 049 (f);0001 300 049 (C);V1-SLF_20260614143022.dfq
 ```
 
 # Workflow
