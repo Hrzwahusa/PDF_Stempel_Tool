@@ -23,7 +23,7 @@ jobs:
 
     - name: Exe kompilieren
       run: |
-        pyinstaller --onefile --noconsole --name PDF_Stempel_Tool --add-data "source/fonts;fonts" source/pdf_stamper.py
+        pyinstaller --onefile --noconsole --name PDF_Stempel_Tool --add-data "source/fonts;fonts" --add-data "source/help.md;." source/pdf_stamper.py
   
     - name: Fertige Exe hochladen
       uses: actions/upload-artifact@v4
