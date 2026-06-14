@@ -190,6 +190,9 @@ class PDFStamperApp:
         if style == "primary":
             bg, fg, hov, pre = self.C_PRIMARY, self.C_WHITE, self.C_PRI_HOV, self.C_PRI_PRE
             font, px, py = self.F_BTN_PRI, self.s(16), self.s(8)
+        elif style == "primary_small":
+            bg, fg, hov, pre = self.C_PRIMARY, self.C_WHITE, self.C_PRI_HOV, self.C_PRI_PRE
+            font, px, py = self.F_BTN_SEC, self.s(10), self.s(6)
         elif style == "danger":
             bg, fg, hov, pre = self.C_DANGER_BG, self.C_DANGER_FG, self.C_DANGER_HV, self.C_DANGER_HV
             font, px, py = self.F_BTN_SEC, self.s(10), self.s(6)
@@ -371,9 +374,9 @@ class PDFStamperApp:
                              highlightthickness=0)
         main_container.add(left_frame, minsize=self.s(260), padx=0, pady=0)
 
-        self._section_label(left_frame, "Stempel").pack(anchor="w", padx=8, pady=(8, 2))
+        self._section_label(left_frame, "Stempel").pack(anchor="center", padx=8, pady=(8, 2))
 
-        self.preview_frame = tk.Frame(left_frame, bg=self.C_BG, height=self.s(80),
+        self.preview_frame = tk.Frame(left_frame, bg=self.C_CANVAS_BG, height=self.s(80),
                                       highlightthickness=1,
                                       highlightbackground=self.C_BORDER)
         self.preview_frame.pack(fill=tk.X, padx=8, pady=4)
@@ -386,25 +389,29 @@ class PDFStamperApp:
 
         stamp_btn_row = tk.Frame(left_frame, bg=self.C_BG)
         stamp_btn_row.pack(fill=tk.X, padx=8, pady=4)
-        self._btn(stamp_btn_row, "Stempel abwählen",
-                  command=self.deselect_stamp).pack(side=tk.LEFT, padx=(0, 4))
-        self._btn(stamp_btn_row, "Alle entfernen",
+        inner_btn_row = tk.Frame(stamp_btn_row, bg=self.C_BG)
+        inner_btn_row.pack(anchor="center")
+        self._btn(inner_btn_row, "Stempel abwählen",
+                  command=self.deselect_stamp, style="primary_small").pack(side=tk.LEFT, padx=(0, 4))
+        self._btn(inner_btn_row, "Alle entfernen",
                   command=self.clear_all_stamps, style="danger",
                   image=self._fa_icons["trash"], compound=tk.LEFT).pack(side=tk.LEFT)
 
-        stamp_panel = tk.Frame(left_frame, bg=self.C_BG,
+        stamp_panel = tk.Frame(left_frame, bg=self.C_CANVAS_BG,
                                highlightthickness=1, highlightbackground=self.C_BORDER)
         stamp_panel.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
-        self.stamp_canvas = tk.Canvas(stamp_panel, bg=self.C_BG, highlightthickness=0)
+        self.stamp_canvas = tk.Canvas(stamp_panel, bg=self.C_CANVAS_BG, highlightthickness=0)
         stamp_sb = tk.Scrollbar(stamp_panel, command=self.stamp_canvas.yview,
                                 bg=self.C_BG, troughcolor=self.C_BG)
         self.stamp_canvas.configure(yscrollcommand=stamp_sb.set)
         stamp_sb.pack(side=tk.RIGHT, fill=tk.Y)
         self.stamp_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.stamp_inner_frame = tk.Frame(self.stamp_canvas, bg=self.C_BG)
-        self.stamp_canvas.create_window((0, 0), window=self.stamp_inner_frame, anchor="nw")
+        self.stamp_inner_frame = tk.Frame(self.stamp_canvas, bg=self.C_CANVAS_BG)
+        _stamp_win = self.stamp_canvas.create_window((0, 0), window=self.stamp_inner_frame, anchor="n")
+        self.stamp_canvas.bind("<Configure>",
+            lambda e: self.stamp_canvas.coords(_stamp_win, e.width // 2, 0))
 
-        self._section_label(left_frame, "Neue Dateien").pack(anchor="w", padx=8, pady=(4, 2))
+        self._section_label(left_frame, "Neue Dateien").pack(anchor="center", padx=8, pady=(4, 2))
 
         file_panel = tk.Frame(left_frame, bg=self.C_BG,
                               highlightthickness=1, highlightbackground=self.C_BORDER)
@@ -422,7 +429,7 @@ class PDFStamperApp:
         self.file_listbox.bind('<Double-Button-1>', self.open_from_list)
 
         self._btn(left_frame, "Ausgewählte Datei öffnen",
-                  command=self.open_from_list).pack(fill=tk.X, padx=8, pady=(0, 8))
+                  command=self.open_from_list, style="primary_small").pack(fill=tk.X, padx=8, pady=(0, 8))
 
         # ── Rechte Seite ────────────────────────────────────────────────────
         right_frame = tk.Frame(main_container, bg=self.C_BG,
@@ -439,15 +446,21 @@ class PDFStamperApp:
         self._btn(toolbar, "▶", command=self.next_page,
                   font=("Segoe UI Symbol", 11)).pack(side=tk.LEFT, padx=(2, 8))
 
-        self.page_label = tk.Label(toolbar, text="Keine PDF geladen",
+        self.page_label = tk.Label(toolbar, text="–",
                                    bg=self.C_BG, fg=self.C_HINT, font=self.F_SMALL)
         self.page_label.pack(side=tk.LEFT, padx=4)
 
         self._btn(toolbar, "Zoom +", command=self.zoom_in).pack(side=tk.LEFT, padx=2)
         self._btn(toolbar, "Zoom −", command=self.zoom_out).pack(side=tk.LEFT, padx=2)
+        self._btn(toolbar, "Reset", command=self.zoom_reset).pack(side=tk.LEFT, padx=2)
+        self.zoom_label = tk.Label(toolbar, text="100%", bg=self.C_BG, fg=self.C_HINT, font=self.F_SMALL)
+        self.zoom_label.pack(side=tk.LEFT, padx=2)
+
+        # Spacer: nimmt freien Platz zwischen Zoom-Label und Speichern-Button
+        tk.Frame(toolbar, bg=self.C_BG).pack(side=tk.LEFT, expand=True, fill=tk.X)
 
         self._btn(toolbar, "Speichern", command=self.save_pdf, style="primary",
-                  image=self._fa_icons["save"], compound=tk.LEFT).pack(side=tk.RIGHT, padx=(4, 0))
+                  image=self._fa_icons["save"], compound=tk.LEFT).pack(side=tk.LEFT, padx=(4, 0))
 
         filename_bar = tk.Frame(right_frame, bg=self.C_WHITE, height=30,
                                 highlightthickness=1, highlightbackground=self.C_BORDER)
@@ -893,10 +906,17 @@ class PDFStamperApp:
     def zoom_in(self):
         self.zoom = min(self.zoom + 0.2, 3.0)
         self.display_all_pages()
+        self.zoom_label.config(text=f"{round(self.zoom * 100)}%")
 
     def zoom_out(self):
         self.zoom = max(self.zoom - 0.2, 0.5)
         self.display_all_pages()
+        self.zoom_label.config(text=f"{round(self.zoom * 100)}%")
+
+    def zoom_reset(self):
+        self.zoom = 1.0
+        self.display_all_pages()
+        self.zoom_label.config(text=f"{round(self.zoom * 100)}%")
     
     def place_stamp(self, event):
         """Stempel an Mausposition platzieren (zentriert)"""
@@ -1182,7 +1202,7 @@ class PDFStamperApp:
         self.page_photo_refs = []
         self.stamped_pages = set()
         self.pdf_canvas.delete("all")
-        self.page_label.config(text="Keine PDF geladen")
+        self.page_label.config(text="–")
         self.root.after(3000, lambda: self.filename_label.config(text="Keine Datei geöffnet", fg=self.C_HINT))
         
 
