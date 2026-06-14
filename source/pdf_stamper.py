@@ -44,11 +44,15 @@ class PDFStamperApp:
         self._fa_icons = {}        # PhotoImage-Referenzen (verhindert GC)
         self.auto_save_var = tk.BooleanVar(value=self.config.get("auto_save", False))
         self.auto_delete_var=tk.BooleanVar(value=self.config.get("auto_delete", False))
+        self.simple_stamp_var = tk.BooleanVar(value=self.config.get("simple_stamp_mode", False))
         
         # Theme + GUI erstellen
         self._setup_theme()
         self.create_gui()
-        
+
+        if self.config.get("simple_stamp_mode", False):
+            self.root.title("PDF Stempel Tool  [Einfacher Modus]")
+
         # Überwachung starten
         self.watch_folder()
         
@@ -59,9 +63,10 @@ class PDFStamperApp:
             "save_path": str(Path.home() / "Documents"),
             "dfq_path": str(Path.home() / "Documents"),
             "dfq_same_as_open": True,
-            "auto_save": False,  # Automatisch speichern ohne Dialog
-            "auto_delete": False, # Automatisches löschen alter Protokolle
-            "auto_delete_time": 12 # Protokolle älter x Stunden löschen
+            "auto_save": False,
+            "auto_delete": False,
+            "auto_delete_time": 12,
+            "simple_stamp_mode": False
         }
         
         if os.path.exists(self.config_file):
@@ -325,9 +330,17 @@ class PDFStamperApp:
             label=f"Lösche Protokolle älter {self.config.get('auto_delete_time')}h",
             command=self.set_delete_time)
 
+        self.settings_menu.add_separator()
+        self.settings_menu.add_checkbutton(
+            label="Einfacher Stempel-Modus  (kein DFQ, kein Archiv)",
+            command=self.toggle_simple_stamp_mode,
+            variable=self.simple_stamp_var)
+
         info_menu = _menu(menubar)
         menubar.add_cascade(label="?", menu=info_menu)
-        info_menu.add_command(label="Info", command=self.show_info)
+        info_menu.add_command(label="Hilfe",  command=self.show_help)
+        info_menu.add_separator()
+        info_menu.add_command(label="Info",   command=self.show_info)
 
         # ── Hauptcontainer ──────────────────────────────────────────────────
         main_container = tk.PanedWindow(self.root, orient=tk.HORIZONTAL,
@@ -507,6 +520,132 @@ class PDFStamperApp:
         self.preview_label.configure(image="", text="Kein Stempel ausgewählt", fg=self.C_HINT)
         self.preview_label.image = None
         
+    def show_help(self):
+        """Hilfe-Dialog – Inhalt wird aus help.md geladen und gerendert"""
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Hilfe – PDF Stempel Tool")
+        dlg.configure(bg=self.C_BG)
+        dlg.resizable(False, True)
+        dlg.grab_set()
+        width = 580
+        dlg.minsize(width, 400)
+        self.root.update_idletasks()
+        rx = self.root.winfo_rootx() + self.root.winfo_width() // 2 - width // 2
+        ry = self.root.winfo_rooty() + self.root.winfo_height() // 2 - 320
+        dlg.geometry(f"{width}x640+{rx}+{ry}")
+
+        # Scrollbarer Bereich
+        canvas = tk.Canvas(dlg, bg=self.C_BG, highlightthickness=0)
+        scrollbar = tk.Scrollbar(dlg, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        inner = tk.Frame(canvas, bg=self.C_BG)
+        inner_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(inner_id, width=e.width))
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
+
+        P = 20
+
+        def render_h1(text):
+            tk.Label(inner, text=text, font=("Segoe UI", 13, "bold"),
+                     bg=self.C_BG, fg=self.C_PRIMARY, anchor="w").pack(fill=tk.X, padx=P, pady=(18, 2))
+            tk.Frame(inner, bg=self.C_PRIMARY, height=1).pack(fill=tk.X, padx=P, pady=(0, 6))
+
+        def render_h2(text):
+            tk.Label(inner, text=text, font=("Segoe UI", 10, "bold"),
+                     bg=self.C_BG, fg=self.C_TEXT, anchor="w").pack(fill=tk.X, padx=P, pady=(10, 1))
+
+        def render_p(text):
+            tk.Label(inner, text=text, font=self.F_BODY,
+                     bg=self.C_BG, fg=self.C_TEXT, anchor="w",
+                     justify=tk.LEFT, wraplength=width - P * 2 - 20).pack(fill=tk.X, padx=P + 4)
+
+        def render_code(text):
+            tk.Label(inner, text=text, font=("Courier New", 9),
+                     bg=self.C_WHITE, fg=self.C_TEXT, anchor="w",
+                     relief=tk.FLAT, justify=tk.LEFT,
+                     highlightthickness=1, highlightbackground=self.C_BORDER,
+                     padx=8, pady=4).pack(fill=tk.X, padx=P + 4, pady=(2, 4))
+
+        def render_listitem(num, text):
+            row = tk.Frame(inner, bg=self.C_BG)
+            row.pack(fill=tk.X, padx=P + 4, pady=2)
+            tk.Label(row, text=str(num), font=("Segoe UI", 9, "bold"),
+                     bg=self.C_PRIMARY, fg=self.C_WHITE,
+                     width=2, anchor="center").pack(side=tk.LEFT, padx=(0, 8))
+            tk.Label(row, text=text, font=self.F_BODY, bg=self.C_BG, fg=self.C_TEXT,
+                     anchor="w", justify=tk.LEFT,
+                     wraplength=width - P * 2 - 50).pack(side=tk.LEFT, fill=tk.X)
+
+        # ── help.md laden und rendern ────────────────────────────────────────
+        tk.Label(inner, text="PDF Stempel Tool – Hilfe", font=("Segoe UI", 15, "bold"),
+                 bg=self.C_BG, fg=self.C_TEXT).pack(padx=P, pady=(18, 0), anchor="w")
+        tk.Label(inner, text=f"Version {self.version}", font=self.F_BODY,
+                 bg=self.C_BG, fg=self.C_HINT).pack(padx=P, anchor="w")
+
+        help_path = self._resource_path("help.md")
+        try:
+            with open(help_path, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except FileNotFoundError:
+            render_p(f"Hilfedatei nicht gefunden:\n{help_path}")
+            lines = []
+
+        para_buf = []
+        in_code  = False
+        code_buf = []
+
+        def flush_para():
+            if para_buf:
+                render_p(" ".join(para_buf))
+                para_buf.clear()
+
+        for line in lines:
+            if line.startswith("```"):
+                if in_code:
+                    render_code("\n".join(code_buf))
+                    code_buf.clear()
+                    in_code = False
+                else:
+                    flush_para()
+                    in_code = True
+                continue
+
+            if in_code:
+                code_buf.append(line)
+                continue
+
+            if line.startswith("# "):
+                flush_para()
+                render_h1(line[2:])
+            elif line.startswith("## "):
+                flush_para()
+                render_h2(line[3:])
+            elif line.strip() == "":
+                flush_para()
+            else:
+                # Nummerierte Liste: "1. text"
+                import re
+                m = re.match(r'^(\d+)\.\s+(.*)', line)
+                if m:
+                    flush_para()
+                    render_listitem(m.group(1), m.group(2))
+                else:
+                    para_buf.append(line.strip())
+
+        flush_para()
+        tk.Frame(inner, bg=self.C_BG, height=16).pack()
+
+        # ── Schließen-Button ────────────────────────────────────────────────
+        tk.Frame(dlg, bg=self.C_BORDER, height=1).pack(fill=tk.X)
+        btn_row = tk.Frame(dlg, bg=self.C_BG)
+        btn_row.pack(pady=10, padx=20, anchor="e")
+        self._btn(btn_row, "Schließen", command=dlg.destroy, style="primary").pack(side=tk.RIGHT)
+
     def show_info(self):
         self._msgbox("Info", f'Erstellt von: Jan Schmidt\nBei Fragen und Anregungen Email an: jan.schmidt2@zf.com\n\nPDF_Stempel_Tool v{self.version}', kind="info")
     
@@ -581,8 +720,8 @@ class PDFStamperApp:
                             rel_path = os.path.relpath(full_path, open_path)
                             mtime = os.path.getmtime(full_path)
 
-                            # Nur Dateien anzeigen die zur Programmliste passen
-                            if self.matches_programm_list(file):
+                            # Im einfachen Modus alle PDFs anzeigen, sonst Programmliste prüfen
+                            if self.config.get("simple_stamp_mode", False) or self.matches_programm_list(file):
                                 all_pdf_files.append((rel_path, mtime, full_path))
 
                 # Nach Änderungszeit sortieren (neueste zuerst)
@@ -867,7 +1006,11 @@ class PDFStamperApp:
                     pass
 
     def save_pdf(self):
-        """Gestempelte PDF in Ausgabeordner kopieren, Originale archivieren"""
+        """Gestempelte PDF speichern – je nach Modus mit oder ohne DFQ/Archiv"""
+        if self.config.get("simple_stamp_mode", False):
+            self.save_pdf_simple()
+            return
+
         self.cleanup_old_files()
         if not self.pdf_document:
             self._msgbox("Warnung", "Keine PDF geöffnet.", kind="warning")
@@ -935,6 +1078,59 @@ class PDFStamperApp:
         except Exception as e:
             self._msgbox("Fehler", f"Speichern fehlgeschlagen:\n{str(e)}", kind="error")
     
+    def save_pdf_simple(self):
+        """Einfacher Stempel-Modus: PDF speichern ohne DFQ-Suche und ohne Archivierung"""
+        if not self.pdf_document:
+            self._msgbox("Warnung", "Keine PDF geöffnet.", kind="warning")
+            return
+
+        pdf_filename = os.path.basename(self.current_pdf)
+        save_path = self.config.get("save_path", "")
+        open_path = os.path.normpath(self.config.get("open_path", ""))
+
+        name, ext = os.path.splitext(pdf_filename)
+        if os.path.normpath(save_path) == open_path:
+            default_name = f"{name}_gestempelt{ext}"
+        else:
+            default_name = pdf_filename
+
+        if self.config.get("auto_save", False):
+            out_path = os.path.join(save_path, default_name)
+        else:
+            out_path = filedialog.asksaveasfilename(
+                initialdir=save_path,
+                initialfile=default_name,
+                defaultextension=".pdf",
+                filetypes=[("PDF Dateien", "*.pdf")],
+                title="Gestempelte PDF speichern"
+            )
+            if not out_path:
+                return
+
+        try:
+            os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+            self.pdf_document.save(out_path)
+            self.filename_label.config(text=f"Gespeichert: {os.path.basename(out_path)}", fg=self.C_PRIMARY)
+            self.close_pdf()
+        except Exception as e:
+            self._msgbox("Fehler", f"Speichern fehlgeschlagen:\n{str(e)}", kind="error")
+
+    def toggle_simple_stamp_mode(self):
+        """Einfachen Stempel-Modus umschalten"""
+        active = self.simple_stamp_var.get()
+        self.config["simple_stamp_mode"] = active
+        self.save_config()
+        if active:
+            self.root.title("PDF Stempel Tool  [Einfacher Modus]")
+            self._msgbox(
+                "Einfacher Stempel-Modus aktiv",
+                "DFQ-Suche und Archivierung sind deaktiviert.\n"
+                "PDFs werden nur gestempelt gespeichert.",
+                kind="info"
+            )
+        else:
+            self.root.title("PDF Stempel Tool")
+
     def close_pdf(self):
         """Schließt die aktuell geöffnete PDF und leert den Canvas"""
         if self.pdf_document:
