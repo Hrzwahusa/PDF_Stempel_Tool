@@ -774,7 +774,7 @@ class PDFStamperApp:
 
                             # Im einfachen Modus alle PDFs anzeigen, sonst Programmliste prüfen
                             if self.matches_programm_list(file, config_key="oqisprogramm_list", empty_result=False):
-                                dfq_file, dfq_error = self.find_dfq_file(file)
+                                dfq_file, dfq_error = self.find_dfq_file(file, config_key="oqisprogramm_list")
                                 if dfq_file:
                                     shutil.move(full_path, os.path.join(stabi_path, file))
                                     shutil.move(dfq_file, os.path.join(oqis_ein_path, os.path.basename(dfq_file)))
@@ -980,9 +980,9 @@ class PDFStamperApp:
             return False
         return all(i in self.stamped_pages for i in range(len(self.pdf_document)))
 
-    def get_matching_programm_entry(self, filename):
+    def get_matching_programm_entry(self, filename, config_key="programm_list"):
         """Gibt die 3 Teile (p1,p2,p3) des ersten passenden Programmlisten-Eintrags zurück"""
-        programm_list = self.config.get("programm_list", [])
+        programm_list = self.config.get(config_key, [])
         filename_lower = filename.lower()
         for entry in programm_list:
             if not entry.strip():
@@ -1014,7 +1014,7 @@ class PDFStamperApp:
     
       return None
 
-    def find_dfq_file(self, pdf_filename):
+    def find_dfq_file(self, pdf_filename, config_key="programm_list"):
         """Sucht passende DFQ-Datei (gleiche Werkstück/Mblatt/Zustand-Teile + gleicher Zeitstempel)"""
         if self.config.get("dfq_same_as_open", True):
             dfq_path = self.config.get("open_path", "")
@@ -1024,7 +1024,7 @@ class PDFStamperApp:
         if not os.path.exists(dfq_path):
             return None, f"DFQ-Ordner nicht gefunden:\n{dfq_path}"
 
-        entry = self.get_matching_programm_entry(pdf_filename)
+        entry = self.get_matching_programm_entry(pdf_filename, config_key=config_key)
         if not entry:
             return None, "Kein passender Programmlisten-Eintrag für die PDF gefunden."
 
