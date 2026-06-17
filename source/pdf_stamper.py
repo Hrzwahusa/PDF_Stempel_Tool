@@ -1212,7 +1212,7 @@ class PDFStamperApp:
         self.page_label.config(text="–")
         self.root.after(3000, lambda: self.filename_label.config(text="Keine Datei geöffnet", fg=self.C_HINT))
         
-    def stabi_save_path(self):
+    def set_stabi_path(self):
         """Stabilitätsprüfung PDF-Speicherpfad festlegen"""
         path = filedialog.askdirectory(title="Stabilitätsprüfung PDF-Speicherpfad wählen")
         if path:
