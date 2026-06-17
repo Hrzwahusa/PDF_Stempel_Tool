@@ -729,7 +729,7 @@ class PDFStamperApp:
         self.scan_folder_now()
         self.root.after(2000, self.watch_folder)  # Alle 2 Sekunden prüfen
     
-    def matches_programm_list(self, filename, programm_list[]):
+    def matches_programm_list(self, filename, programm_list):
         """Prüft ob Dateiname alle 3 Teile mindestens eines Programmlisten-Eintrags enthält"""
         active_entries = [e.strip() for e in programm_list if e.strip()]
         if not active_entries:
