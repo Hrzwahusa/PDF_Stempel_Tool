@@ -78,6 +78,7 @@ class PDFStamperApp:
             "dfq_path": str(Path.home() / "Documents"),
             "dfq_out": str(Path.home() / "Documents"),
             "stabi_path": str(Path.home() / "Documents"),
+            "oqis_ein_path": str(Path.home() / "Documents"),
             "dfq_same_as_open": True,
             "auto_save": False,
             "auto_delete": False,
@@ -336,6 +337,7 @@ class PDFStamperApp:
         self.settings_menu.add_command(label="DFQ Eingang festlegen",             command=self.set_dfq_config)
         self.settings_menu.add_command(label="DFQ Ausgang festlegen",            command=self.set_dfq_out_config)
         self.settings_menu.add_command(label="Stabilitätsprüfung PDF Ordner festlegen",    command=self.set_stabi_path)
+        self.settings_menu.add_command(label="O-Qis-Eingang Pfad festlegen",    command=self.set_oqis_ein_path)
         self.settings_menu.add_separator()
         self.settings_menu.add_checkbutton(label="Automatisch speichern (ohne Dialog)",
                                            command=self.toggle_auto_save,
@@ -729,8 +731,9 @@ class PDFStamperApp:
         self.scan_folder_now()
         self.root.after(2000, self.watch_folder)  # Alle 2 Sekunden prüfen
     
-    def matches_programm_list(self, filename, programm_list):
+    def matches_programm_list(self, filename):
         """Prüft ob Dateiname alle 3 Teile mindestens eines Programmlisten-Eintrags enthält"""
+        programm_list = self.config.get("programm_list", [])
         active_entries = [e.strip() for e in programm_list if e.strip()]
         if not active_entries:
             return True  # Kein Filter konfiguriert → alle anzeigen
@@ -748,13 +751,31 @@ class PDFStamperApp:
                     return True
         return False
 
+    def matches_programm_list_oqis(self, filename):
+        """Prüft ob Dateiname alle 3 Teile mindestens eines Programmlisten-Eintrags enthält"""
+        programm_list = self.config.get("oqisprogramm_list", [])
+        active_entries = [e.strip() for e in programm_list if e.strip()]
+        if not active_entries:
+            return False  # Kein Filter konfiguriert → alle anzeigen
+
+        filename_lower = filename.lower()
+        for entry in active_entries:
+            parts = entry.split(';')
+            if len(parts) >= 3:
+                p1, p2, p3 = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                if p1 and p2 and p3 and (
+                    p1.lower() in filename_lower and
+                    p2.lower() in filename_lower and
+                    p3.lower() in filename_lower
+                ):
+                    return True
+        return False
+    
     def scan_folder_now(self):
         """Führt den Ordner-Scan sofort aus"""
         open_path = self.config.get("open_path", "")
         oqis_ein_path = self.config.get("oqis_ein_path", "")
         stabi_path = self.config.get("stabi_path", "")
-        programm_list = self.config.get("programm_list", [])
-        oqisprogramm_list = self.config.get("oqisprogramm_list", [])
 
         if os.path.exists(open_path):
             try:
@@ -773,13 +794,13 @@ class PDFStamperApp:
                             mtime = os.path.getmtime(full_path)
 
                             # Im einfachen Modus alle PDFs anzeigen, sonst Programmliste prüfen
-                            if self.matches_programm_list(file, oqisprogramm_list):
+                            if self.matches_programm_list_oqis(file):
                                 """Finde dfq Datei und verschiebe in O-Qis Eingang"""
                                 pdf_filename = os.path.basename(file)
                                 dfq_file, dfq_error = self.find_dfq_file(pdf_filename)
                                 shutil.move(file, os.path.join(stabi_path, os.path.basename(file)))
                                 shutil.move(dfq_file, os.path.join(oqis_ein_path, os.path.basename(dfq_file)))
-                            if self.config.get("simple_stamp_mode", False) or self.matches_programm_list(file, programm_list):
+                            if self.config.get("simple_stamp_mode", False) or self.matches_programm_list(file):
                                 all_pdf_files.append((rel_path, mtime, full_path))
 
                 # Nach Änderungszeit sortieren (neueste zuerst)
@@ -1220,6 +1241,13 @@ class PDFStamperApp:
             self.save_config()
             self._msgbox("Erfolg", f"Stabilitätsprüfung Speicherpfad festgelegt:\n{path}", kind="info")
 
+    def set_oqis_ein_path(self):
+        """O-Qis Eingangspfad festlegen"""
+        path = filedialog.askdirectory(title="O-Qis Eingangsordner wählen")
+        if path:
+            self.config["oqis_ein_path"] = path
+            self.save_config()
+            self._msgbox("Erfolg", f"O-Qis Eingangsordner festgelegt:\n{path}", kind="info")
     
     def set_open_path(self):
         """Öffnungspfad festlegen"""
