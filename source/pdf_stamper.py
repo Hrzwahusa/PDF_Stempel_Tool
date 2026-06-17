@@ -331,13 +331,13 @@ class PDFStamperApp:
         self.settings_menu = _menu(menubar)
         menubar.add_cascade(label="Einstellungen", menu=self.settings_menu)
         self.settings_menu.add_command(label="PDF Öffnungspfad festlegen",           command=self.set_open_path)
-        self.settings_menu.add_command(label="PDF Speicherpfad festlegen",           command=self.set_save_path)
-        self.settings_menu.add_command(label="Programme zum Stempeln festlegen", command=self.set_programm_config)
-        self.settings_menu.add_command(label="Programme für O-Qis festlegen",    command=self.set_oqisprogramm_config)
+        self.settings_menu.add_command(label="PDF Speicherpfad festlegen",           command=lambda: self._set_path("save_path",    "PDF-Speicherpfad wählen",              "Speicherpfad festgelegt"))
+        self.settings_menu.add_command(label="Programme zum Stempeln festlegen", command=lambda: self._set_programm_config("programm_list",     "Programme konfigurieren"))
+        self.settings_menu.add_command(label="Programme für O-Qis festlegen",    command=lambda: self._set_programm_config("oqisprogramm_list", "Programme für alten O-Qis upload konfigurieren"))
         self.settings_menu.add_command(label="DFQ Eingang festlegen",             command=self.set_dfq_config)
-        self.settings_menu.add_command(label="DFQ Ausgang festlegen",            command=self.set_dfq_out_config)
-        self.settings_menu.add_command(label="Stabilitätsprüfung PDF Ordner festlegen",    command=self.set_stabi_path)
-        self.settings_menu.add_command(label="O-Qis-Eingang Pfad festlegen",    command=self.set_oqis_ein_path)
+        self.settings_menu.add_command(label="DFQ Ausgang festlegen",            command=lambda: self._set_path("dfq_out",      "DFQ-Speicherpfad wählen",              "DFQ-Speicherpfad festgelegt"))
+        self.settings_menu.add_command(label="Stabilitätsprüfung PDF Ordner festlegen",    command=lambda: self._set_path("stabi_path",   "Stabilitätsprüfung PDF-Speicherpfad wählen", "Stabilitätsprüfung Speicherpfad festgelegt"))
+        self.settings_menu.add_command(label="O-Qis-Eingang Pfad festlegen",    command=lambda: self._set_path("oqis_ein_path","O-Qis Eingangsordner wählen",          "O-Qis Eingangsordner festgelegt"))
         self.settings_menu.add_separator()
         self.settings_menu.add_checkbutton(label="Automatisch speichern (ohne Dialog)",
                                            command=self.toggle_auto_save,
@@ -731,32 +731,11 @@ class PDFStamperApp:
         self.scan_folder_now()
         self.root.after(2000, self.watch_folder)  # Alle 2 Sekunden prüfen
     
-    def matches_programm_list(self, filename):
+    def matches_programm_list(self, filename, config_key="programm_list", empty_result=True):
         """Prüft ob Dateiname alle 3 Teile mindestens eines Programmlisten-Eintrags enthält"""
-        programm_list = self.config.get("programm_list", [])
-        active_entries = [e.strip() for e in programm_list if e.strip()]
+        active_entries = [e.strip() for e in self.config.get(config_key, []) if e.strip()]
         if not active_entries:
-            return True  # Kein Filter konfiguriert → alle anzeigen
-
-        filename_lower = filename.lower()
-        for entry in active_entries:
-            parts = entry.split(';')
-            if len(parts) >= 3:
-                p1, p2, p3 = parts[0].strip(), parts[1].strip(), parts[2].strip()
-                if p1 and p2 and p3 and (
-                    p1.lower() in filename_lower and
-                    p2.lower() in filename_lower and
-                    p3.lower() in filename_lower
-                ):
-                    return True
-        return False
-
-    def matches_programm_list_oqis(self, filename):
-        """Prüft ob Dateiname alle 3 Teile mindestens eines Programmlisten-Eintrags enthält"""
-        programm_list = self.config.get("oqisprogramm_list", [])
-        active_entries = [e.strip() for e in programm_list if e.strip()]
-        if not active_entries:
-            return False  # Kein Filter konfiguriert → alle anzeigen
+            return empty_result
 
         filename_lower = filename.lower()
         for entry in active_entries:
@@ -794,13 +773,12 @@ class PDFStamperApp:
                             mtime = os.path.getmtime(full_path)
 
                             # Im einfachen Modus alle PDFs anzeigen, sonst Programmliste prüfen
-                            if self.matches_programm_list_oqis(file):
-                                """Finde dfq Datei und verschiebe in O-Qis Eingang"""
-                                pdf_filename = os.path.basename(file)
-                                dfq_file, dfq_error = self.find_dfq_file(pdf_filename)
-                                shutil.move(file, os.path.join(stabi_path, os.path.basename(file)))
-                                shutil.move(dfq_file, os.path.join(oqis_ein_path, os.path.basename(dfq_file)))
-                            if self.config.get("simple_stamp_mode", False) or self.matches_programm_list(file):
+                            if self.matches_programm_list(file, config_key="oqisprogramm_list", empty_result=False):
+                                dfq_file, dfq_error = self.find_dfq_file(file)
+                                if dfq_file:
+                                    shutil.move(full_path, os.path.join(stabi_path, file))
+                                    shutil.move(dfq_file, os.path.join(oqis_ein_path, os.path.basename(dfq_file)))
+                            elif self.config.get("simple_stamp_mode", False) or self.matches_programm_list(file):
                                 all_pdf_files.append((rel_path, mtime, full_path))
 
                 # Nach Änderungszeit sortieren (neueste zuerst)
@@ -1233,21 +1211,12 @@ class PDFStamperApp:
         self.page_label.config(text="–")
         self.root.after(3000, lambda: self.filename_label.config(text="Keine Datei geöffnet", fg=self.C_HINT))
         
-    def set_stabi_path(self):
-        """Stabilitätsprüfung PDF-Speicherpfad festlegen"""
-        path = filedialog.askdirectory(title="Stabilitätsprüfung PDF-Speicherpfad wählen")
+    def _set_path(self, config_key, title, success_msg):
+        path = filedialog.askdirectory(title=title)
         if path:
-            self.config["stabi_path"] = path
+            self.config[config_key] = path
             self.save_config()
-            self._msgbox("Erfolg", f"Stabilitätsprüfung Speicherpfad festgelegt:\n{path}", kind="info")
-
-    def set_oqis_ein_path(self):
-        """O-Qis Eingangspfad festlegen"""
-        path = filedialog.askdirectory(title="O-Qis Eingangsordner wählen")
-        if path:
-            self.config["oqis_ein_path"] = path
-            self.save_config()
-            self._msgbox("Erfolg", f"O-Qis Eingangsordner festgelegt:\n{path}", kind="info")
+            self._msgbox("Erfolg", f"{success_msg}:\n{path}", kind="info")
     
     def set_open_path(self):
         """Öffnungspfad festlegen"""
@@ -1300,21 +1269,6 @@ class PDFStamperApp:
         self._btn(btn_row, "Speichern", command=save, style="primary").pack(side=tk.RIGHT)
         entry.bind("<Return>", lambda e: save())
     
-    def set_save_path(self):
-        """PDF-Speicherpfad festlegen"""
-        path = filedialog.askdirectory(title="PDF-Speicherpfad wählen")
-        if path:
-            self.config["save_path"] = path
-            self.save_config()
-            self._msgbox("Erfolg", f"Speicherpfad festgelegt:\n{path}", kind="info")
-
-    def set_dfq_out_config(self):
-        """DFQ-Speicherpfad festlegen"""
-        path = filedialog.askdirectory(title="DFQ-Speicherpfad wählen")
-        if path:
-            self.config["dfq_out"] = path
-            self.save_config()
-            self._msgbox("Erfolg", f"Speicherpfad festgelegt:\n{path}", kind="info")
 
     def set_dfq_config(self):
         """DFQ-Ordner konfigurieren"""
@@ -1380,9 +1334,9 @@ class PDFStamperApp:
         self._btn(btn_row, "Abbrechen", command=dlg.destroy, style="secondary").pack(side=tk.RIGHT, padx=(6, 0))
         self._btn(btn_row, "Speichern", command=save, style="primary").pack(side=tk.RIGHT)
 
-    def set_oqisprogramm_config(self):
-        old_list = self.config.get("oqisprogramm_list", [])
-        dlg = self._dialog("Programme für alten O-Qis upload konfigurieren", width=540)
+    def _set_programm_config(self, config_key, title):
+        old_list = self.config.get(config_key, [])
+        dlg = self._dialog(title, width=540)
 
         inner = tk.Frame(dlg, bg=self.C_BG)
         inner.pack(fill=tk.BOTH, expand=True, padx=20, pady=(16, 4))
@@ -1477,7 +1431,7 @@ class PDFStamperApp:
                 )
                 return
             try:
-                self.config["oqisprogramm_list"] = new_list
+                self.config[config_key] = new_list
                 self.save_config()
                 dlg.destroy()
             except Exception:
@@ -1486,111 +1440,6 @@ class PDFStamperApp:
         self._btn(btn_row, "Abbrechen", command=dlg.destroy, style="secondary").pack(side=tk.RIGHT, padx=(6, 0))
         self._btn(btn_row, "Speichern", command=save, style="primary").pack(side=tk.RIGHT)
 
-    def set_programm_config(self):
-        old_list = self.config.get("programm_list", [])
-        dlg = self._dialog("Programme konfigurieren", width=540)
-
-        inner = tk.Frame(dlg, bg=self.C_BG)
-        inner.pack(fill=tk.BOTH, expand=True, padx=20, pady=(16, 4))
-
-        self._section_label(inner, "Programmliste").pack(fill=tk.X)
-        tk.Label(inner, text="Format: Werkstücknummer;MBlattnummer;Zustand  (ein Eintrag pro Zeile)",
-                 font=self.F_SMALL, bg=self.C_BG, fg=self.C_HINT, anchor="w").pack(fill=tk.X, pady=(2, 8))
-
-        text_border = tk.Frame(inner, bg=self.C_WHITE,
-                               highlightthickness=1, highlightbackground=self.C_BORDER)
-        text_border.pack(fill=tk.BOTH, expand=True)
-
-        # Zeilennummern-Gutter
-        linenum_text = tk.Text(text_border, bg=self.C_BG, fg=self.C_HINT,
-                               font=self.F_MONO, relief=tk.FLAT,
-                               width=3, padx=4, pady=6,
-                               state=tk.DISABLED, cursor="arrow",
-                               highlightthickness=0, takefocus=False)
-        linenum_text.pack(side=tk.LEFT, fill=tk.Y)
-        linenum_text.tag_configure("invalid_num", foreground=self.C_DANGER_FG,
-                                   font=(self.F_MONO[0], self.F_MONO[1], "bold"))
-        tk.Frame(text_border, bg=self.C_BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y)
-
-        scrollbar = tk.Scrollbar(text_border, orient=tk.VERTICAL)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        text_widget = tk.Text(text_border, bg=self.C_WHITE, fg=self.C_TEXT,
-                              font=self.F_MONO, relief=tk.FLAT,
-                              insertbackground=self.C_TEXT,
-                              selectbackground=self.C_SELECTED, selectforeground=self.C_TEXT,
-                              width=55, height=14, padx=6, pady=6,
-                              yscrollcommand=lambda f, l: (scrollbar.set(f, l),
-                                                           linenum_text.yview_moveto(f)))
-        scrollbar.configure(command=text_widget.yview)
-        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        text_widget.tag_configure("invalid_line",
-                                  background=self.C_DANGER_BG, foreground=self.C_DANGER_FG)
-
-        text_widget.insert("1.0", "\n".join(old_list))
-
-        def update_line_numbers(invalid_lines=None):
-            n = int(text_widget.index("end-1c").split(".")[0])
-            linenum_text.config(state=tk.NORMAL)
-            linenum_text.delete("1.0", tk.END)
-            for i in range(1, n + 1):
-                linenum_text.insert(tk.END, f"{i:>2}\n")
-                if invalid_lines and i in invalid_lines:
-                    linenum_text.tag_add("invalid_num",
-                                         f"{i}.0", f"{i}.end")
-            linenum_text.config(state=tk.DISABLED)
-            linenum_text.yview_moveto(text_widget.yview()[0])
-
-        def on_key(*_):
-            text_widget.tag_remove("invalid_line", "1.0", tk.END)
-            error_label.config(text="")
-            update_line_numbers()
-
-        text_widget.bind("<KeyRelease>", on_key)
-        linenum_text.bind("<MouseWheel>",
-                          lambda e: text_widget.event_generate("<MouseWheel>", delta=e.delta))
-
-        update_line_numbers()
-
-        error_label = tk.Label(inner, text="", font=self.F_SMALL,
-                               bg=self.C_BG, fg=self.C_DANGER_FG, anchor="w")
-        error_label.pack(fill=tk.X, pady=(4, 0))
-
-        tk.Frame(dlg, bg=self.C_BORDER, height=1).pack(fill=tk.X, pady=(8, 0))
-        btn_row = tk.Frame(dlg, bg=self.C_BG)
-        btn_row.pack(pady=10, padx=20, anchor="e")
-
-        def save():
-            text_widget.tag_remove("invalid_line", "1.0", tk.END)
-            all_lines = text_widget.get("1.0", "end-1c").splitlines()
-            new_list = []
-            invalid = []
-            for i, line in enumerate(all_lines, 1):
-                if not line.strip():
-                    continue
-                parts = [p.strip() for p in line.split(";")]
-                if len(parts) != 3 or any(p == "" for p in parts):
-                    invalid.append(i)
-                else:
-                    new_list.append(line.strip())
-            if invalid:
-                for ln in invalid:
-                    text_widget.tag_add("invalid_line", f"{ln}.0", f"{ln}.end")
-                update_line_numbers(invalid_lines=set(invalid))
-                error_label.config(
-                    text=f"Zeile(n) {', '.join(map(str, invalid))}: "
-                         f"Format muss Werkstück;Mblatt;Zustand sein!"
-                )
-                return
-            try:
-                self.config["programm_list"] = new_list
-                self.save_config()
-                dlg.destroy()
-            except Exception:
-                error_label.config(text="Speichern fehlgeschlagen!")
-
-        self._btn(btn_row, "Abbrechen", command=dlg.destroy, style="secondary").pack(side=tk.RIGHT, padx=(6, 0))
-        self._btn(btn_row, "Speichern", command=save, style="primary").pack(side=tk.RIGHT)
 
 
 
