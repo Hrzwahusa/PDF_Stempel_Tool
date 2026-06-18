@@ -1,20 +1,24 @@
 # Was macht das Programm?
 
-Das Tool überwacht einen Eingangsordner auf neue PDF-Prüfprotokolle. Du wählst einen Stempel, klickst ihn auf jede Seite der PDF, und drückst "Speichern". Das Programm sucht dann automatisch die passende DFQ-Messdatei (gleicher Programmname + gleicher Zeitstempel), kopiert beide Dateien in den Ausgabeordner und verschiebt die Originale ins Archiv.
+Das Tool überwacht einen Eingangsordner auf neue PDF-Prüfprotokolle. Du wählst einen Stempel, klickst ihn auf jede Seite der PDF, und drückst "Speichern". Das Programm sucht dann automatisch die passende DFQ-Messdatei (gleicher Programmname + gleicher Zeitstempel), kopiert beide Dateien in die entsprechenden Ausgabeordner und verschiebt die Originale ins Archiv. Dateien älter 7 Tage im Archiv werden automatisch gelöscht.
 
 # Konfiguration
 
-## Öffnungspfad  (Einstellungen → Öffnungspfad festlegen)
+## PDF Öffnungspfad  (Einstellungen → PDF Öffnungspfad festlegen)
 
 Der Ordner, den das Tool auf neue PDFs überwacht. Hier müssen auch die DFQ-Dateien liegen, sofern kein separater DFQ-Ordner gesetzt ist.
 
-## Speicherpfad  (Einstellungen → Speicherpfad festlegen)
+## PDF Speicherpfad  (Einstellungen → PDF Speicherpfad festlegen)
 
 Wohin die gestempelte PDF und die DFQ-Datei nach dem Speichern kopiert werden.
 
-## DFQ-Ordner  (Einstellungen → DFQ Ordner festlegen)
+## DFQ Eingang festlegen  (Einstellungen → DFQ Eingang festlegen)
 
 Falls DFQ-Dateien in einem anderen Ordner als die PDFs liegen, kann hier ein separater Pfad gesetzt werden. Standardmäßig wird der Öffnungspfad verwendet.
+
+## DFQ Ausgang festlegen (Einstellungen → DFQ Ausgang festlegen)
+
+Speicherort für DFQ Dateien festlegen (für Upload)
 
 ## Programme konfigurieren  (Einstellungen → Programme zum Stempeln festlegen)
 
@@ -26,6 +30,20 @@ z. B.  0001_300_049_C_V1;0001_300_049_F;H_4PLT_da_df_MdK
 ```
 
 Eine PDF erscheint in der Liste, wenn alle drei Teile im Dateinamen enthalten sind. Ist die Liste leer, werden alle PDFs im Öffnungsordner angezeigt.
+
+## Programme für O-Qis festlegen (Einstellungen → Programme für O-Qis festlegen)
+
+PDFs werden in Ordner zur Stabilitätsprüfung abgelegt und DFQ Dateien von diesen Programmen werden in den alten O-Qis_Eingang Ordner verschoben um den normalen O-Qis Uploadflow zu durchlaufen.
+z.B. Programme zur Stabilitätsprüfung
+Format gleich "Programme konfigurieren"
+
+## PDF Stabilitätsprüfung Ordner festlegen (Einstellungen → Stabilitätsprüfung PDF Ordner festlegen)
+
+In diesem Ordner werden die PDFs aus der Liste Programme für O-Qis abgelegt
+
+## O-Qis Eingang Ordner festlegen (Einstellungen → O-Qis-Eingang Pfad festlegen)
+
+Pfad zum normalen O-Qis Upload Ordner (standart C:\users\public\zff\O-Qis\O-Qis_Eingang)
 
 # Dateinamens-Format
 
