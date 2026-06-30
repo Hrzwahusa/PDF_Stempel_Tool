@@ -28,7 +28,7 @@ class PDFStamperApp:
         self.config = self.load_config()
         
         # Variablen
-        self.version = "1.2.0"
+        self.version = "1.3.0"
         self.current_pdf = None
         self.pdf_document = None
         self.current_page = 0
@@ -83,6 +83,7 @@ class PDFStamperApp:
             "auto_save": False,
             "auto_delete": False,
             "auto_delete_time": 12,
+            "auto_move_sonstige": False,
             "simple_stamp_mode": False
         }
         
@@ -328,32 +329,7 @@ class PDFStamperApp:
         file_menu.add_separator()
         file_menu.add_command(label="Beenden",       command=self.root.quit)
 
-        self.settings_menu = _menu(menubar)
-        menubar.add_cascade(label="Einstellungen", menu=self.settings_menu)
-        self.settings_menu.add_command(label="PDF Öffnungspfad festlegen",           command=self.set_open_path)
-        self.settings_menu.add_command(label="PDF Speicherpfad festlegen",           command=lambda: self._set_path("save_path",    "PDF-Speicherpfad wählen",              "Speicherpfad festgelegt"))
-        self.settings_menu.add_command(label="Programme zum Stempeln festlegen", command=lambda: self._set_programm_config("programm_list",     "Programme konfigurieren"))
-        self.settings_menu.add_command(label="Programme für O-Qis festlegen",    command=lambda: self._set_programm_config("oqisprogramm_list", "Programme für alten O-Qis upload konfigurieren"))
-        self.settings_menu.add_command(label="DFQ Eingang festlegen",             command=self.set_dfq_config)
-        self.settings_menu.add_command(label="DFQ Ausgang festlegen",            command=lambda: self._set_path("dfq_out",      "DFQ-Speicherpfad wählen",              "DFQ-Speicherpfad festgelegt"))
-        self.settings_menu.add_command(label="Stabilitätsprüfung PDF Ordner festlegen",    command=lambda: self._set_path("stabi_path",   "Stabilitätsprüfung PDF-Speicherpfad wählen", "Stabilitätsprüfung Speicherpfad festgelegt"))
-        self.settings_menu.add_command(label="O-Qis-Eingang Pfad festlegen",    command=lambda: self._set_path("oqis_ein_path","O-Qis Eingangsordner wählen",          "O-Qis Eingangsordner festgelegt"))
-        self.settings_menu.add_separator()
-        self.settings_menu.add_checkbutton(label="Automatisch speichern (ohne Dialog)",
-                                           command=self.toggle_auto_save,
-                                           variable=self.auto_save_var)
-        self.settings_menu.add_checkbutton(label="Alte Protokolle automatisch löschen",
-                                           command=self.toggle_auto_delete,
-                                           variable=self.auto_delete_var)
-        self.settings_menu.add_command(
-            label=f"Lösche Protokolle älter {self.config.get('auto_delete_time')}h",
-            command=self.set_delete_time)
-
-        self.settings_menu.add_separator()
-        self.settings_menu.add_checkbutton(
-            label="Einfacher Stempel-Modus  (kein DFQ, kein Archiv)",
-            command=self.toggle_simple_stamp_mode,
-            variable=self.simple_stamp_var)
+        menubar.add_command(label="Einstellungen", command=self.show_settings)
 
         info_menu = _menu(menubar)
         menubar.add_cascade(label="?", menu=info_menu)
@@ -752,18 +728,21 @@ class PDFStamperApp:
     
     def scan_folder_now(self):
         """Führt den Ordner-Scan sofort aus"""
-        open_path = self.config.get("open_path", "")
+        open_path     = self.config.get("open_path", "")
         oqis_ein_path = self.config.get("oqis_ein_path", "")
-        stabi_path = self.config.get("stabi_path", "")
+        stabi_path    = self.config.get("stabi_path", "")
+        sonstige_path = os.path.join(open_path, "Eingang_Sonstige")
+        move_sonstige = self.config.get("auto_move_sonstige", False)
 
         if os.path.exists(open_path):
             try:
                 # Alle PDF-Dateien inkl. Unterordner finden (Archiv-Ordner ausschließen)
-                archive_name = os.path.normpath(os.path.join(open_path, "Archiv"))
+                archive_name   = os.path.normpath(os.path.join(open_path, "Archiv"))
+                sonstige_name  = os.path.normpath(sonstige_path)
                 all_pdf_files = []
                 for root, dirs, files in os.walk(open_path):
-                    # Archiv-Unterordner nicht rekursiv betreten
-                    if os.path.normpath(root) == archive_name:
+                    norm_root = os.path.normpath(root)
+                    if norm_root in (archive_name, sonstige_name):
                         dirs.clear()
                         continue
                     for file in files:
@@ -780,6 +759,12 @@ class PDFStamperApp:
                                     shutil.move(dfq_file, os.path.join(oqis_ein_path, os.path.basename(dfq_file)))
                             elif self.config.get("simple_stamp_mode", False) or self.matches_programm_list(file):
                                 all_pdf_files.append((rel_path, mtime, full_path))
+                            elif move_sonstige:
+                                os.makedirs(sonstige_path, exist_ok=True)
+                                dfq = self.find_dfq_by_timestamp(file)
+                                shutil.move(full_path, os.path.join(sonstige_path, file))
+                                if dfq:
+                                    shutil.move(dfq, os.path.join(sonstige_path, os.path.basename(dfq)))
 
                 # Nach Änderungszeit sortieren (neueste zuerst)
                 all_pdf_files.sort(key=lambda x: x[1], reverse=True)
@@ -1014,6 +999,25 @@ class PDFStamperApp:
     
       return None
 
+    def find_dfq_by_timestamp(self, pdf_filename):
+        """Sucht eine DFQ-Datei nur über den Zeitstempel – ohne Programmlisten-Prüfung."""
+        ts = self.extract_timestamp(pdf_filename)
+        if not ts:
+            return None
+        ts_variants = {ts}
+        if len(ts) == 14:
+            ts_variants.add(ts[:8] + "_" + ts[8:])
+        dfq_path = (self.config.get("open_path", "")
+                    if self.config.get("dfq_same_as_open", True)
+                    else self.config.get("dfq_path", ""))
+        if not os.path.exists(dfq_path):
+            return None
+        for root, dirs, files in os.walk(dfq_path):
+            for f in files:
+                if f.lower().endswith(".dfq") and any(v in f for v in ts_variants):
+                    return os.path.join(root, f)
+        return None
+
     def find_dfq_file(self, pdf_filename, config_key="programm_list"):
         """Sucht passende DFQ-Datei (gleiche Werkstück/Mblatt/Zustand-Teile + gleicher Zeitstempel)"""
         if self.config.get("dfq_same_as_open", True):
@@ -1180,21 +1184,476 @@ class PDFStamperApp:
         except Exception as e:
             self._msgbox("Fehler", f"Speichern fehlgeschlagen:\n{str(e)}", kind="error")
 
-    def toggle_simple_stamp_mode(self):
-        """Einfachen Stempel-Modus umschalten"""
-        active = self.simple_stamp_var.get()
-        self.config["simple_stamp_mode"] = active
-        self.save_config()
-        if active:
-            self.root.title("PDF Stempel Tool  [Einfacher Modus]")
-            self._msgbox(
-                "Einfacher Stempel-Modus aktiv",
-                "DFQ-Suche und Archivierung sind deaktiviert.\n"
-                "PDFs werden nur gestempelt gespeichert.",
-                kind="info"
+    def show_settings(self):
+        old_open_path = self.config.get("open_path", "")
+
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Einstellungen")
+        dlg.configure(bg=self.C_BG)
+        dlg.resizable(True, True)
+        dlg.grab_set()
+        w, h = self.s(760), self.s(580)
+        self.root.update_idletasks()
+        rx = self.root.winfo_rootx() + self.root.winfo_width()  // 2 - w // 2
+        ry = self.root.winfo_rooty() + self.root.winfo_height() // 2 - h // 2
+        dlg.geometry(f"{w}x{h}+{rx}+{ry}")
+        dlg.minsize(self.s(560), self.s(420))
+
+        # ── Body: Sidebar + Inhalt ───────────────────────────────────────────
+        body = tk.Frame(dlg, bg=self.C_BG)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        sidebar = tk.Frame(body, bg=self.C_WHITE, width=self.s(150))
+        sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        sidebar.pack_propagate(False)
+        tk.Frame(body, bg=self.C_BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y)
+
+        content_host = tk.Frame(body, bg=self.C_BG)
+        content_host.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        sections = {}
+        nav_btns = {}
+        active_sec = [None]
+
+        def show_section(name):
+            if active_sec[0] and active_sec[0] in sections:
+                sections[active_sec[0]].pack_forget()
+                nav_btns[active_sec[0]].config(bg=self.C_WHITE, font=self.F_BODY)
+            active_sec[0] = name
+            sections[name].pack(fill=tk.BOTH, expand=True)
+            nav_btns[name].config(bg=self.C_SELECTED,
+                                   font=(self.F_BODY[0], self.F_BODY[1], "bold"))
+
+        for nav_lbl in ["Pfade", "Programme", "Optionen"]:
+            sections[nav_lbl] = tk.Frame(content_host, bg=self.C_BG)
+            b = tk.Button(sidebar, text=nav_lbl, font=self.F_BODY,
+                          bg=self.C_WHITE, fg=self.C_TEXT,
+                          relief=tk.FLAT, bd=0,
+                          padx=self.s(14), pady=self.s(10),
+                          anchor="w", cursor="hand2",
+                          command=lambda n=nav_lbl: show_section(n),
+                          activebackground=self.C_SELECTED,
+                          activeforeground=self.C_TEXT,
+                          highlightthickness=0)
+            b.pack(fill=tk.X)
+            nav_btns[nav_lbl] = b
+
+        # ── Pfade ────────────────────────────────────────────────────────────
+        paths = {k: [self.config.get(k, "")]
+                 for k in ["open_path", "save_path", "dfq_path",
+                            "dfq_out", "stabi_path", "oqis_ein_path"]}
+        dfq_same_var = tk.BooleanVar(value=self.config.get("dfq_same_as_open", True))
+
+        pfade_outer = sections["Pfade"]
+        pfade_cv = tk.Canvas(pfade_outer, bg=self.C_BG, highlightthickness=0)
+        pfade_sb = tk.Scrollbar(pfade_outer, orient=tk.VERTICAL, command=pfade_cv.yview)
+        pfade_cv.configure(yscrollcommand=pfade_sb.set)
+        pfade_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        pfade_cv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        pfade_f = tk.Frame(pfade_cv, bg=self.C_BG)
+        pfade_win = pfade_cv.create_window((0, 0), window=pfade_f, anchor="nw")
+        pfade_f.bind("<Configure>",
+                     lambda e: pfade_cv.configure(scrollregion=pfade_cv.bbox("all")))
+        pfade_cv.bind("<Configure>",
+                      lambda e: pfade_cv.itemconfig(pfade_win, width=e.width))
+        pfade_cv.bind("<MouseWheel>",
+                      lambda e: pfade_cv.yview_scroll(int(-1 * e.delta / 120), "units"))
+        pfade_f.bind("<MouseWheel>",
+                     lambda e: pfade_cv.yview_scroll(int(-1 * e.delta / 120), "units"))
+
+        p = tk.Frame(pfade_f, bg=self.C_BG)
+        p.pack(fill=tk.X, padx=self.s(20), pady=self.s(16))
+
+        def _info_tip(parent, text):
+            lbl = tk.Label(parent, text=" ⓘ", font=self.F_SMALL,
+                           bg=parent["bg"], fg=self.C_PRIMARY, cursor="hand2")
+            _tip = [None]
+
+            def _show(e):
+                if _tip[0]:
+                    return
+                t = tk.Toplevel(dlg)
+                t.overrideredirect(True)
+                t.attributes("-topmost", True)
+                t.configure(bg=self.C_TEXT)
+                tk.Label(t, text=text, font=self.F_SMALL,
+                         bg=self.C_TEXT, fg=self.C_WHITE,
+                         padx=self.s(10), pady=self.s(6),
+                         wraplength=self.s(280), justify="left").pack()
+                t.update_idletasks()
+                x = e.widget.winfo_rootx()
+                y = e.widget.winfo_rooty() + e.widget.winfo_height() + 4
+                if x + t.winfo_width() > t.winfo_screenwidth():
+                    x = t.winfo_screenwidth() - t.winfo_width() - 8
+                t.geometry(f"+{x}+{y}")
+                _tip[0] = t
+
+            def _hide(e):
+                if _tip[0]:
+                    _tip[0].destroy()
+                    _tip[0] = None
+
+            lbl.bind("<Enter>", _show)
+            lbl.bind("<Leave>", _hide)
+            return lbl
+
+        def _path_row(parent, label, key, tooltip=None):
+            hdr = tk.Frame(parent, bg=self.C_BG)
+            hdr.pack(fill=tk.X, pady=(self.s(8), 2))
+            tk.Label(hdr, text=label, font=self.F_BODY,
+                     bg=self.C_BG, fg=self.C_TEXT,
+                     anchor="w").pack(side=tk.LEFT)
+            if tooltip:
+                _info_tip(hdr, tooltip).pack(side=tk.LEFT)
+            row = tk.Frame(parent, bg=self.C_BG)
+            row.pack(fill=tk.X)
+            cur = paths[key][0]
+            border = tk.Frame(row, bg=self.C_WHITE,
+                              highlightthickness=1, highlightbackground=self.C_BORDER)
+            border.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            lbl = tk.Label(border, text=cur or "(nicht festgelegt)", anchor="w",
+                           bg=self.C_WHITE,
+                           fg=self.C_TEXT if cur else self.C_HINT,
+                           font=self.F_SMALL, padx=6, pady=5)
+            lbl.pack(fill=tk.X)
+
+            def choose(k=key, l=lbl):
+                pp = filedialog.askdirectory(title=f"{label} wählen")
+                if pp:
+                    paths[k][0] = pp
+                    l.config(text=pp, fg=self.C_TEXT)
+
+            self._btn(row, "Ordner wählen", command=choose,
+                      style="secondary").pack(side=tk.LEFT, padx=(self.s(8), 0))
+            return lbl
+
+        _path_row(p, "PDF Öffnungspfad", "open_path",
+                  tooltip="Der Ordner, den das Programm auf neue PDFs überwacht. Alle PDFs in diesem Ordner (und Unterordnern) erscheinen in der Liste.")
+        _path_row(p, "PDF Speicherpfad", "save_path",
+                  tooltip="Wohin die gestempelte PDF nach dem Speichern kopiert wird.")
+        _path_row(p, "DFQ Ausgang", "dfq_out",
+                  tooltip="Wohin die DFQ-Datei nach dem Speichern kopiert wird (falls abweichend vom normalen Speicherpfad).")
+        _path_row(p, "Stabilitätsprüfung Speicherordner", "stabi_path",
+                  tooltip="Zielordner für PDFs von Programmen aus der O-Qis-Programmliste. Diese werden bei 'Scan Now' automatisch hierher verschoben.")
+        _path_row(p, "O-Qis Eingangsordner", "oqis_ein_path",
+                  tooltip="Zielordner für DFQ-Dateien von Programmen aus der O-Qis-Programmliste.")
+
+        tk.Frame(p, bg=self.C_BORDER, height=1).pack(fill=tk.X, pady=(self.s(14), self.s(6)))
+        dfq_hdr = tk.Frame(p, bg=self.C_BG)
+        dfq_hdr.pack(fill=tk.X)
+        tk.Label(dfq_hdr, text="DFQ Eingang", font=self.F_BODY, bg=self.C_BG,
+                 fg=self.C_TEXT, anchor="w").pack(side=tk.LEFT)
+        _info_tip(dfq_hdr, "Ordner, in dem nach passenden DFQ-Messdateien gesucht wird. PDF und DFQ werden über den gemeinsamen Zeitstempel im Dateinamen zugeordnet.").pack(side=tk.LEFT)
+        dfq_cb_row = tk.Frame(p, bg=self.C_BG)
+        dfq_cb_row.pack(fill=tk.X, pady=(4, 4))
+        tk.Checkbutton(dfq_cb_row, text="Gleicher Ordner wie PDF Öffnungspfad",
+                       variable=dfq_same_var, command=lambda: _update_dfq_ui(),
+                       bg=self.C_BG, fg=self.C_TEXT, font=self.F_SMALL,
+                       activebackground=self.C_BG, activeforeground=self.C_TEXT,
+                       selectcolor=self.C_WHITE, cursor="hand2",
+                       highlightthickness=0).pack(side=tk.LEFT)
+        _info_tip(dfq_cb_row, "Wenn aktiv, wird im selben Ordner wie die PDFs nach DFQ-Dateien gesucht. Sonst kann ein separater Ordner angegeben werden.").pack(side=tk.LEFT)
+
+        dfq_row = tk.Frame(p, bg=self.C_BG)
+        dfq_row.pack(fill=tk.X)
+        dfq_border = tk.Frame(dfq_row, bg=self.C_WHITE,
+                              highlightthickness=1, highlightbackground=self.C_BORDER)
+        dfq_border.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        cur_dfq = paths["dfq_path"][0]
+        dfq_lbl = tk.Label(dfq_border, text=cur_dfq or "(nicht festgelegt)", anchor="w",
+                           bg=self.C_WHITE, fg=self.C_TEXT if cur_dfq else self.C_HINT,
+                           font=self.F_SMALL, padx=6, pady=5)
+        dfq_lbl.pack(fill=tk.X)
+
+        def _choose_dfq():
+            pp = filedialog.askdirectory(title="DFQ Eingang wählen")
+            if pp:
+                paths["dfq_path"][0] = pp
+                dfq_lbl.config(text=pp, fg=self.C_TEXT)
+                dfq_border.config(bg=self.C_WHITE)
+
+        dfq_btn = self._btn(dfq_row, "Ordner wählen", command=_choose_dfq, style="secondary")
+        dfq_btn.pack(side=tk.LEFT, padx=(self.s(8), 0))
+
+        def _update_dfq_ui():
+            if dfq_same_var.get():
+                dfq_lbl.config(fg=self.C_HINT, bg=self.C_SURFACE)
+                dfq_border.config(bg=self.C_SURFACE)
+                dfq_btn.config(state=tk.DISABLED, cursor="arrow")
+            else:
+                dfq_lbl.config(fg=self.C_TEXT if paths["dfq_path"][0] else self.C_HINT,
+                               bg=self.C_WHITE)
+                dfq_border.config(bg=self.C_WHITE)
+                dfq_btn.config(state=tk.NORMAL, cursor="hand2")
+
+        _update_dfq_ui()
+
+        # ── Programme ────────────────────────────────────────────────────────
+        prog_outer = sections["Programme"]
+        prog_cv = tk.Canvas(prog_outer, bg=self.C_BG, highlightthickness=0)
+        prog_sb = tk.Scrollbar(prog_outer, orient=tk.VERTICAL, command=prog_cv.yview)
+        prog_cv.configure(yscrollcommand=prog_sb.set)
+        prog_sb.pack(side=tk.RIGHT, fill=tk.Y)
+        prog_cv.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        prog_f = tk.Frame(prog_cv, bg=self.C_BG)
+        prog_win = prog_cv.create_window((0, 0), window=prog_f, anchor="nw")
+        prog_f.bind("<Configure>",
+                    lambda e: prog_cv.configure(scrollregion=prog_cv.bbox("all")))
+        prog_cv.bind("<Configure>",
+                     lambda e: prog_cv.itemconfig(prog_win, width=e.width))
+        prog_cv.bind("<MouseWheel>",
+                     lambda e: prog_cv.yview_scroll(int(-1 * e.delta / 120), "units"))
+
+        prog_c = tk.Frame(prog_f, bg=self.C_BG)
+        prog_c.pack(fill=tk.X, padx=self.s(20), pady=self.s(16))
+
+        prog_editors = {}
+
+        def _prog_editor(parent, config_key, title, tooltip=None):
+            hdr = tk.Frame(parent, bg=self.C_BG)
+            hdr.pack(fill=tk.X)
+            self._section_label(hdr, title).pack(side=tk.LEFT)
+            if tooltip:
+                _info_tip(hdr, tooltip).pack(side=tk.LEFT)
+            tk.Label(parent,
+                     text="Format: Werkstücknummer;MBlattnummer;Zustand  (ein Eintrag pro Zeile)",
+                     font=self.F_SMALL, bg=self.C_BG, fg=self.C_HINT,
+                     anchor="w").pack(fill=tk.X, pady=(2, 8))
+
+            text_border = tk.Frame(parent, bg=self.C_WHITE,
+                                   highlightthickness=1, highlightbackground=self.C_BORDER)
+            text_border.pack(fill=tk.X)
+
+            linenum = tk.Text(text_border, bg=self.C_BG, fg=self.C_HINT,
+                              font=self.F_MONO, relief=tk.FLAT, width=3,
+                              padx=4, pady=6, state=tk.DISABLED,
+                              cursor="arrow", highlightthickness=0, takefocus=False)
+            linenum.pack(side=tk.LEFT, fill=tk.Y)
+            linenum.tag_configure("invalid_num", foreground=self.C_DANGER_FG,
+                                  font=(self.F_MONO[0], self.F_MONO[1], "bold"))
+            tk.Frame(text_border, bg=self.C_BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y)
+
+            vsb = tk.Scrollbar(text_border, orient=tk.VERTICAL)
+            vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+            tw = tk.Text(text_border, bg=self.C_WHITE, fg=self.C_TEXT,
+                         font=self.F_MONO, relief=tk.FLAT,
+                         insertbackground=self.C_TEXT,
+                         selectbackground=self.C_SELECTED, selectforeground=self.C_TEXT,
+                         width=55, height=10, padx=6, pady=6,
+                         yscrollcommand=lambda f, l: (vsb.set(f, l),
+                                                      linenum.yview_moveto(f)))
+            vsb.configure(command=tw.yview)
+            tw.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            tw.tag_configure("invalid_line",
+                             background=self.C_DANGER_BG, foreground=self.C_DANGER_FG)
+            tw.insert("1.0", "\n".join(self.config.get(config_key, [])))
+
+            err = tk.Label(parent, text="", font=self.F_SMALL,
+                           bg=self.C_BG, fg=self.C_DANGER_FG, anchor="w")
+            err.pack(fill=tk.X, pady=(4, 0))
+
+            def upd_nums(invalid_lines=None):
+                n = int(tw.index("end-1c").split(".")[0])
+                linenum.config(state=tk.NORMAL)
+                linenum.delete("1.0", tk.END)
+                for i in range(1, n + 1):
+                    linenum.insert(tk.END, f"{i:>2}\n")
+                    if invalid_lines and i in invalid_lines:
+                        linenum.tag_add("invalid_num", f"{i}.0", f"{i}.end")
+                linenum.config(state=tk.DISABLED)
+                linenum.yview_moveto(tw.yview()[0])
+
+            tw.bind("<KeyRelease>", lambda *_: (
+                tw.tag_remove("invalid_line", "1.0", tk.END),
+                err.config(text=""),
+                upd_nums()
+            ))
+            linenum.bind("<MouseWheel>",
+                         lambda e: tw.event_generate("<MouseWheel>", delta=e.delta))
+            upd_nums()
+            prog_editors[config_key] = (tw, err, upd_nums)
+
+        _prog_editor(prog_c, "programm_list", "Programme zum Stempeln",
+                     tooltip="PDFs, deren Dateiname alle drei Teile (Werkstück;Mblatt;Zustand) enthält, werden in der Hauptliste angezeigt. Ist die Liste leer, werden alle PDFs im Öffnungsordner angezeigt.")
+        tk.Frame(prog_c, bg=self.C_BORDER, height=1).pack(fill=tk.X, pady=self.s(16))
+        _prog_editor(prog_c, "oqisprogramm_list", "Programme für O-Qis",
+                     tooltip="PDFs dieser Programme werden bei 'Scan Now' automatisch ohne Stempel-Vorgang verschoben: PDF → Stabilitätsprüfung-Ordner, DFQ → O-Qis-Eingangsordner.")
+
+        # ── Optionen ─────────────────────────────────────────────────────────
+        opt_f = tk.Frame(sections["Optionen"], bg=self.C_BG)
+        opt_f.pack(fill=tk.X, padx=self.s(20), pady=self.s(16))
+
+        auto_save_v    = tk.BooleanVar(value=self.config.get("auto_save",           False))
+        auto_delete_v  = tk.BooleanVar(value=self.config.get("auto_delete",         False))
+        move_sonstige_v= tk.BooleanVar(value=self.config.get("auto_move_sonstige",  False))
+        simple_v       = tk.BooleanVar(value=self.config.get("simple_stamp_mode",   False))
+
+        def _cb(parent, text, var, hint=None, command=None, tooltip=None):
+            row = tk.Frame(parent, bg=self.C_BG)
+            row.pack(fill=tk.X, pady=(self.s(4), 0))
+            tk.Checkbutton(row, text=text, variable=var, command=command,
+                           bg=self.C_BG, fg=self.C_TEXT, font=self.F_BODY,
+                           activebackground=self.C_BG, activeforeground=self.C_TEXT,
+                           selectcolor=self.C_WHITE, cursor="hand2",
+                           highlightthickness=0).pack(side=tk.LEFT)
+            if tooltip:
+                _info_tip(row, tooltip).pack(side=tk.LEFT)
+            if hint:
+                tk.Label(parent, text=hint, font=self.F_SMALL, bg=self.C_BG,
+                         fg=self.C_HINT, anchor="w").pack(
+                    fill=tk.X, padx=(self.s(22), 0), pady=(0, self.s(4)))
+
+        self._section_label(opt_f, "Verhalten").pack(fill=tk.X, pady=(0, self.s(4)))
+        _cb(opt_f, "Automatisch speichern (ohne Dialog)", auto_save_v,
+            tooltip="PDFs werden nach dem Stempeln direkt in den Speicherpfad gespeichert, ohne einen Datei-Dialog zu öffnen.")
+        _cb(opt_f, "Alte Protokolle automatisch löschen", auto_delete_v,
+            command=lambda: _upd_del_state(),
+            tooltip="Dateien im Archiv-Unterordner des Öffnungspfads werden nach der eingestellten Zeit automatisch gelöscht.")
+
+        del_row = tk.Frame(opt_f, bg=self.C_BG)
+        del_row.pack(fill=tk.X, padx=(self.s(22), 0), pady=(self.s(2), self.s(4)))
+        del_lbl = tk.Label(del_row, text="Löschen nach (Stunden):", font=self.F_SMALL,
+                           bg=self.C_BG, fg=self.C_TEXT)
+        del_lbl.pack(side=tk.LEFT)
+        del_border = tk.Frame(del_row, bg=self.C_WHITE,
+                              highlightthickness=1, highlightbackground=self.C_BORDER)
+        del_border.pack(side=tk.LEFT, padx=(self.s(8), 0))
+        del_entry = tk.Entry(del_border, bg=self.C_WHITE, fg=self.C_TEXT,
+                             font=self.F_BODY, relief=tk.FLAT, width=5,
+                             insertbackground=self.C_TEXT)
+        del_entry.pack(padx=6, pady=4)
+        del_entry.insert(0, str(self.config.get("auto_delete_time", 12)))
+        del_err = tk.Label(opt_f, text="", font=self.F_SMALL, bg=self.C_BG,
+                           fg=self.C_DANGER_FG, anchor="w", padx=self.s(22))
+        del_err.pack(fill=tk.X)
+
+        def _upd_del_state():
+            on = auto_delete_v.get()
+            del_entry.config(state=tk.NORMAL if on else tk.DISABLED)
+            del_lbl.config(fg=self.C_TEXT if on else self.C_HINT)
+
+        _upd_del_state()
+
+        _cb(opt_f, "Nicht zugeordnete Programme verschieben", move_sonstige_v,
+            hint='PDFs und DFQs ohne Programmlisten-Eintrag landen im Unterordner "Eingang_Sonstige" des Öffnungspfads.',
+            tooltip="Beim Scan-Now werden alle PDFs, die weder in der Stempel-Programmliste noch in der O-Qis-Programmliste stehen, zusammen mit ihrer DFQ in den Unterordner 'Eingang_Sonstige' im Öffnungspfad verschoben. Der Ordner wird automatisch angelegt.")
+
+        tk.Frame(opt_f, bg=self.C_BORDER, height=1).pack(fill=tk.X, pady=self.s(12))
+        self._section_label(opt_f, "Modus").pack(fill=tk.X, pady=(0, self.s(4)))
+        _cb(opt_f, "Einfacher Stempel-Modus (kein DFQ, kein Archiv)", simple_v,
+            hint="PDFs werden nur gestempelt gespeichert. DFQ-Suche und Archivierung entfallen.",
+            tooltip="Fallback-Modus ohne DFQ-Zuordnung. Alle PDFs im Öffnungsordner werden angezeigt, die Programmliste wird ignoriert, und es wird kein Archiv angelegt.")
+
+        # ── Fußzeile: Fehler + Buttons ────────────────────────────────────────
+        tk.Frame(dlg, bg=self.C_BORDER, height=1).pack(fill=tk.X)
+        foot = tk.Frame(dlg, bg=self.C_BG)
+        foot.pack(fill=tk.X, pady=self.s(10), padx=self.s(20))
+        foot_err = tk.Label(foot, text="", font=self.F_SMALL,
+                            bg=self.C_BG, fg=self.C_DANGER_FG, anchor="w")
+        foot_err.pack(side=tk.LEFT)
+
+        def save():
+            # Programmlisten validieren
+            prog_new = {}
+            prog_ok = True
+            for key, (tw, err, uln) in prog_editors.items():
+                tw.tag_remove("invalid_line", "1.0", tk.END)
+                err.config(text="")
+                lines = tw.get("1.0", "end-1c").splitlines()
+                new_list, bad = [], []
+                for i, line in enumerate(lines, 1):
+                    if not line.strip():
+                        continue
+                    parts = [pp.strip() for pp in line.split(";")]
+                    if len(parts) != 3 or any(pp == "" for pp in parts):
+                        bad.append(i)
+                    else:
+                        new_list.append(line.strip())
+                if bad:
+                    for ln in bad:
+                        tw.tag_add("invalid_line", f"{ln}.0", f"{ln}.end")
+                    uln(invalid_lines=set(bad))
+                    err.config(text=f"Zeile(n) {', '.join(map(str, bad))}: "
+                                    "Format muss Werkstück;Mblatt;Zustand sein!")
+                    prog_ok = False
+                else:
+                    prog_new[key] = new_list
+
+            if not prog_ok:
+                show_section("Programme")
+                foot_err.config(text="Fehler in Programmliste – bitte korrigieren.")
+                return
+
+            # Löschzeit validieren
+            del_time = None
+            if auto_delete_v.get():
+                try:
+                    del_time = int(del_entry.get().strip())
+                    if del_time <= 0:
+                        raise ValueError
+                    del_err.config(text="")
+                except ValueError:
+                    del_err.config(text="Bitte eine Zahl > 0 eingeben!")
+                    show_section("Optionen")
+                    foot_err.config(text="Fehler in Optionen – bitte korrigieren.")
+                    return
+
+            foot_err.config(text="")
+
+            # Pfade übernehmen
+            self.config["open_path"]     = paths["open_path"][0]
+            self.config["save_path"]     = paths["save_path"][0]
+            self.config["dfq_out"]       = paths["dfq_out"][0]
+            self.config["stabi_path"]    = paths["stabi_path"][0]
+            self.config["oqis_ein_path"] = paths["oqis_ein_path"][0]
+            use_same = dfq_same_var.get()
+            self.config["dfq_same_as_open"] = use_same
+            self.config["dfq_path"] = (paths["open_path"][0] if use_same
+                                       else paths["dfq_path"][0])
+
+            # Programmlisten übernehmen
+            for key, lst in prog_new.items():
+                self.config[key] = lst
+
+            # Optionen übernehmen
+            self.config["auto_save"]          = auto_save_v.get()
+            self.config["auto_delete"]         = auto_delete_v.get()
+            self.config["auto_move_sonstige"]  = move_sonstige_v.get()
+            self.config["simple_stamp_mode"]   = simple_v.get()
+            if del_time is not None:
+                self.config["auto_delete_time"] = del_time
+
+            # Seiteneffekte
+            if paths["open_path"][0] != old_open_path:
+                self.watch_files = []
+                self.file_listbox.delete(0, tk.END)
+            self.root.title(
+                "PDF Stempel Tool  [Einfacher Modus]" if simple_v.get()
+                else "PDF Stempel Tool"
             )
-        else:
-            self.root.title("PDF Stempel Tool")
+            self.auto_save_var.set(auto_save_v.get())
+            self.auto_delete_var.set(auto_delete_v.get())
+            self.simple_stamp_var.set(simple_v.get())
+
+            self.save_config()
+            dlg.destroy()
+
+        self._btn(foot, "Abbrechen", command=dlg.destroy,
+                  style="secondary").pack(side=tk.RIGHT, padx=(self.s(6), 0))
+        self._btn(foot, "Speichern", command=save,
+                  style="primary").pack(side=tk.RIGHT)
+
+        def _bind_scroll(widget, handler):
+            if not isinstance(widget, tk.Text):
+                widget.bind("<MouseWheel>", handler)
+            for child in widget.winfo_children():
+                _bind_scroll(child, handler)
+
+        _bind_scroll(pfade_f, lambda e: pfade_cv.yview_scroll(int(-1 * e.delta / 120), "units"))
+        _bind_scroll(prog_f,  lambda e: prog_cv.yview_scroll(int(-1 * e.delta / 120), "units"))
+
+        show_section("Pfade")
 
     def close_pdf(self):
         """Schließt die aktuell geöffnete PDF und leert den Canvas"""
@@ -1211,260 +1670,6 @@ class PDFStamperApp:
         self.page_label.config(text="–")
         self.root.after(3000, lambda: self.filename_label.config(text="Keine Datei geöffnet", fg=self.C_HINT))
         
-    def _set_path(self, config_key, title, success_msg):
-        path = filedialog.askdirectory(title=title)
-        if path:
-            self.config[config_key] = path
-            self.save_config()
-            self._msgbox("Erfolg", f"{success_msg}:\n{path}", kind="info")
-    
-    def set_open_path(self):
-        """Öffnungspfad festlegen"""
-        path = filedialog.askdirectory(title="Öffnungspfad wählen")
-        if path:
-            self.config["open_path"] = path
-            if self.config.get("dfq_same_as_open", True):
-                self.config["dfq_path"] = path
-            self.save_config()
-            self.watch_files = []
-            self.file_listbox.delete(0, tk.END)
-            self._msgbox("Erfolg", f"Öffnungspfad festgelegt:\n{path}", kind="info")
-            
-    def set_delete_time(self):
-        old_time = self.config.get("auto_delete_time")
-        dlg = self._dialog("Lösche Protokolle älter X Stunden", width=380)
-
-        inner = tk.Frame(dlg, bg=self.C_BG)
-        inner.pack(fill=tk.X, padx=20, pady=(16, 4))
-
-        tk.Label(inner, text="Automatisch löschen nach (Stunden)",
-                 font=self.F_BODY, bg=self.C_BG, fg=self.C_TEXT, anchor="w").pack(fill=tk.X, pady=(0, 8))
-
-        ef, entry = self._entry_field(inner)
-        ef.pack(fill=tk.X)
-        entry.insert(0, old_time)
-
-        error_label = tk.Label(inner, text="", font=self.F_SMALL,
-                               bg=self.C_BG, fg=self.C_DANGER_FG, anchor="w")
-        error_label.pack(fill=tk.X, pady=(4, 0))
-
-        tk.Frame(dlg, bg=self.C_BORDER, height=1).pack(fill=tk.X, pady=(12, 0))
-        btn_row = tk.Frame(dlg, bg=self.C_BG)
-        btn_row.pack(pady=10, padx=20, anchor="e")
-
-        def save():
-            val = entry.get().strip()
-            if not val or val == "0":
-                error_label.config(text="Bitte einen Wert > 0 eingeben!")
-                return
-            try:
-                self.config["auto_delete_time"] = int(val)
-                self.save_config()
-                self.settings_menu.entryconfig(tk.END, label=f"Lösche Protokolle älter {self.config.get('auto_delete_time')}h")
-                dlg.destroy()
-            except ValueError:
-                error_label.config(text="Bitte eine gültige Zahl eingeben!")
-
-        self._btn(btn_row, "Abbrechen", command=dlg.destroy, style="secondary").pack(side=tk.RIGHT, padx=(6, 0))
-        self._btn(btn_row, "Speichern", command=save, style="primary").pack(side=tk.RIGHT)
-        entry.bind("<Return>", lambda e: save())
-    
-
-    def set_dfq_config(self):
-        """DFQ-Ordner konfigurieren"""
-        dlg = self._dialog("DFQ Ordner festlegen", width=460)
-
-        same_var = tk.BooleanVar(value=self.config.get("dfq_same_as_open", True))
-        current_path = [self.config.get("dfq_path", "")]
-
-        inner = tk.Frame(dlg, bg=self.C_BG)
-        inner.pack(fill=tk.X, padx=20, pady=(16, 4))
-
-        self._section_label(inner, "DFQ Ordner Einstellungen").pack(fill=tk.X, pady=(0, 10))
-
-        cb = tk.Checkbutton(inner, text="DFQ Ordner gleich PDF Öffnungspfad",
-                            variable=same_var, command=lambda: update_ui(),
-                            bg=self.C_BG, fg=self.C_TEXT, font=self.F_BODY,
-                            activebackground=self.C_BG, activeforeground=self.C_TEXT,
-                            selectcolor=self.C_WHITE, cursor="hand2",
-                            highlightthickness=0)
-        cb.pack(anchor="w", pady=(0, 10))
-
-        path_row = tk.Frame(inner, bg=self.C_BG)
-        path_row.pack(fill=tk.X, pady=(0, 4))
-
-        path_border = tk.Frame(path_row, bg=self.C_WHITE,
-                               highlightthickness=1, highlightbackground=self.C_BORDER)
-        path_border.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        path_label = tk.Label(path_border, text=current_path[0], anchor="w",
-                              bg=self.C_WHITE, fg=self.C_TEXT, font=self.F_SMALL,
-                              padx=6, pady=5)
-        path_label.pack(fill=tk.X)
-
-        def choose_path():
-            path = filedialog.askdirectory(title="DFQ Ordner wählen")
-            if path:
-                current_path[0] = path
-                path_label.config(text=path, fg=self.C_TEXT, bg=self.C_WHITE)
-
-        choose_btn = self._btn(path_row, "Ordner auswählen", command=choose_path, style="secondary")
-        choose_btn.pack(side=tk.LEFT, padx=(8, 0))
-
-        def update_ui():
-            if same_var.get():
-                path_label.config(fg=self.C_HINT, bg=self.C_SURFACE)
-                choose_btn.config(state=tk.DISABLED, cursor="arrow")
-            else:
-                path_label.config(fg=self.C_TEXT, bg=self.C_WHITE)
-                choose_btn.config(state=tk.NORMAL, cursor="hand2")
-
-        update_ui()
-
-        tk.Frame(dlg, bg=self.C_BORDER, height=1).pack(fill=tk.X, pady=(12, 0))
-        btn_row = tk.Frame(dlg, bg=self.C_BG)
-        btn_row.pack(pady=10, padx=20, anchor="e")
-
-        def save():
-            use_same = same_var.get()
-            self.config["dfq_same_as_open"] = use_same
-            self.config["dfq_path"] = self.config.get("open_path", "") if use_same else current_path[0]
-            self.save_config()
-            dlg.destroy()
-
-        self._btn(btn_row, "Abbrechen", command=dlg.destroy, style="secondary").pack(side=tk.RIGHT, padx=(6, 0))
-        self._btn(btn_row, "Speichern", command=save, style="primary").pack(side=tk.RIGHT)
-
-    def _set_programm_config(self, config_key, title):
-        old_list = self.config.get(config_key, [])
-        dlg = self._dialog(title, width=540)
-
-        inner = tk.Frame(dlg, bg=self.C_BG)
-        inner.pack(fill=tk.BOTH, expand=True, padx=20, pady=(16, 4))
-
-        self._section_label(inner, "Programmliste").pack(fill=tk.X)
-        tk.Label(inner, text="Format: Werkstücknummer;MBlattnummer;Zustand  (ein Eintrag pro Zeile)",
-                 font=self.F_SMALL, bg=self.C_BG, fg=self.C_HINT, anchor="w").pack(fill=tk.X, pady=(2, 8))
-
-        text_border = tk.Frame(inner, bg=self.C_WHITE,
-                               highlightthickness=1, highlightbackground=self.C_BORDER)
-        text_border.pack(fill=tk.BOTH, expand=True)
-
-        # Zeilennummern-Gutter
-        linenum_text = tk.Text(text_border, bg=self.C_BG, fg=self.C_HINT,
-                               font=self.F_MONO, relief=tk.FLAT,
-                               width=3, padx=4, pady=6,
-                               state=tk.DISABLED, cursor="arrow",
-                               highlightthickness=0, takefocus=False)
-        linenum_text.pack(side=tk.LEFT, fill=tk.Y)
-        linenum_text.tag_configure("invalid_num", foreground=self.C_DANGER_FG,
-                                   font=(self.F_MONO[0], self.F_MONO[1], "bold"))
-        tk.Frame(text_border, bg=self.C_BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y)
-
-        scrollbar = tk.Scrollbar(text_border, orient=tk.VERTICAL)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        text_widget = tk.Text(text_border, bg=self.C_WHITE, fg=self.C_TEXT,
-                              font=self.F_MONO, relief=tk.FLAT,
-                              insertbackground=self.C_TEXT,
-                              selectbackground=self.C_SELECTED, selectforeground=self.C_TEXT,
-                              width=55, height=14, padx=6, pady=6,
-                              yscrollcommand=lambda f, l: (scrollbar.set(f, l),
-                                                           linenum_text.yview_moveto(f)))
-        scrollbar.configure(command=text_widget.yview)
-        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        text_widget.tag_configure("invalid_line",
-                                  background=self.C_DANGER_BG, foreground=self.C_DANGER_FG)
-
-        text_widget.insert("1.0", "\n".join(old_list))
-
-        def update_line_numbers(invalid_lines=None):
-            n = int(text_widget.index("end-1c").split(".")[0])
-            linenum_text.config(state=tk.NORMAL)
-            linenum_text.delete("1.0", tk.END)
-            for i in range(1, n + 1):
-                linenum_text.insert(tk.END, f"{i:>2}\n")
-                if invalid_lines and i in invalid_lines:
-                    linenum_text.tag_add("invalid_num",
-                                         f"{i}.0", f"{i}.end")
-            linenum_text.config(state=tk.DISABLED)
-            linenum_text.yview_moveto(text_widget.yview()[0])
-
-        def on_key(*_):
-            text_widget.tag_remove("invalid_line", "1.0", tk.END)
-            error_label.config(text="")
-            update_line_numbers()
-
-        text_widget.bind("<KeyRelease>", on_key)
-        linenum_text.bind("<MouseWheel>",
-                          lambda e: text_widget.event_generate("<MouseWheel>", delta=e.delta))
-
-        update_line_numbers()
-
-        error_label = tk.Label(inner, text="", font=self.F_SMALL,
-                               bg=self.C_BG, fg=self.C_DANGER_FG, anchor="w")
-        error_label.pack(fill=tk.X, pady=(4, 0))
-
-        tk.Frame(dlg, bg=self.C_BORDER, height=1).pack(fill=tk.X, pady=(8, 0))
-        btn_row = tk.Frame(dlg, bg=self.C_BG)
-        btn_row.pack(pady=10, padx=20, anchor="e")
-
-        def save():
-            text_widget.tag_remove("invalid_line", "1.0", tk.END)
-            all_lines = text_widget.get("1.0", "end-1c").splitlines()
-            new_list = []
-            invalid = []
-            for i, line in enumerate(all_lines, 1):
-                if not line.strip():
-                    continue
-                parts = [p.strip() for p in line.split(";")]
-                if len(parts) != 3 or any(p == "" for p in parts):
-                    invalid.append(i)
-                else:
-                    new_list.append(line.strip())
-            if invalid:
-                for ln in invalid:
-                    text_widget.tag_add("invalid_line", f"{ln}.0", f"{ln}.end")
-                update_line_numbers(invalid_lines=set(invalid))
-                error_label.config(
-                    text=f"Zeile(n) {', '.join(map(str, invalid))}: "
-                         f"Format muss Werkstück;Mblatt;Zustand sein!"
-                )
-                return
-            try:
-                self.config[config_key] = new_list
-                self.save_config()
-                dlg.destroy()
-            except Exception:
-                error_label.config(text="Speichern fehlgeschlagen!")
-
-        self._btn(btn_row, "Abbrechen", command=dlg.destroy, style="secondary").pack(side=tk.RIGHT, padx=(6, 0))
-        self._btn(btn_row, "Speichern", command=save, style="primary").pack(side=tk.RIGHT)
-
-
-
-
-
-    
-    def toggle_auto_save(self):
-        """Automatisches Speichern umschalten"""
-        # Wert aus der Variable nehmen (die ist jetzt aktuell)
-        new_value = self.auto_save_var.get()
-        self.config["auto_save"] = new_value
-        self.save_config()
-        
-        if new_value:
-            self._msgbox("Auto-Save aktiviert",
-                         "PDFs werden jetzt automatisch ohne Dialog gespeichert.\n\n"
-                         f"Speicherort: {self.config.get('save_path', '')}", kind="info")
-        else:
-            self._msgbox("Auto-Save deaktiviert",
-                         "PDFs werden mit Speichern-Dialog gespeichert.", kind="info")
-                              
-    def toggle_auto_delete(self):
-        new_value = self.auto_delete_var.get()
-        self.config["auto_delete"] = new_value
-        self.save_config()
-
 if __name__ == "__main__":
     root = tk.Tk()
     app = PDFStamperApp(root)
